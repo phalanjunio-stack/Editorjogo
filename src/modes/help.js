@@ -4,7 +4,7 @@ import { el, modal } from '../ui/ui.js';
 const KEYS = [
   ['F5', 'Play: andar pelo mapa (WASD, Shift correr, Espaço pular, E falar com NPC, Esc sair)'],
   ['Botão direito + arrastar', 'Girar a câmera'],
-  ['Botão direito + W A S D', 'Voar (Q desce, E sobe, Shift rápido) — igual ao Unreal'],
+  ['Botão direito + W A S D', 'Voar (Q desce, E sobe, Shift rápido)'],
   ['Botão do meio + arrastar', 'Arrastar a câmera'],
   ['Roda do mouse', 'Zoom (na direção do cursor)'],
   ['Ctrl+Z / Ctrl+Y', 'Desfazer / refazer'],
@@ -32,7 +32,7 @@ export function showHelp() {
         el('li', {}, el('b', {}, 'Roupa: '), 'capas, mantos e bandeiras com física de tecido num boneco andando (ou no seu personagem GLB/FBX).'),
         el('li', {}, el('b', {}, 'Loja e HTML: '), 'multisells e diálogos com prévia no estilo do jogo.'),
         el('li', {}, el('b', {}, 'Play (F5): '), 'ande pelo mapa com a capa e converse com os NPCs para testar tudo.'),
-        el('li', {}, el('b', {}, 'Exportar: '), 'pacote do servidor (L2J/L2Mobius) e pacote do UE5 (Landscape + malhas + script Python).'),
+        el('li', {}, el('b', {}, 'Exportar: '), 'pacote com os arquivos do servidor (L2J/L2Mobius) e validação do projeto.'),
       ),
       el('h3', {}, 'Atalhos'),
       el('table', { class: 'keys' }, ...KEYS.map(([k, v]) => el('tr', {}, el('td', {}, el('kbd', {}, k)), el('td', {}, v)))),
@@ -46,7 +46,7 @@ export function showAbout(name) {
     title: `Sobre o ${name}`,
     body: el('div', { class: 'help' },
       el('p', {}, 'Editor de mundo para servidores estilo Lineage 2: terreno com 8 camadas, céu com nuvens, grama com vento e flores, cidades com peças prontas ou suas malhas, NPCs com IA e drops, zonas, multisell, HTML de diálogo, capas com física de tecido e modo Play.'),
-      el('p', {}, 'Exporta arquivos prontos para L2J/L2Mobius (XML, HTML, SQL) e um pacote para Unreal Engine 5 (Landscape 16 bits, camadas, malhas GLB e script Python).'),
+      el('p', {}, 'Gera os arquivos prontos para o servidor L2J/L2Mobius (XML, HTML, SQL). O projeto inteiro fica num arquivo .json seu.'),
       el('p', { class: 'hint' }, 'Feito com three.js. Tudo roda no navegador; seus arquivos não saem do seu computador.'),
     ),
   });

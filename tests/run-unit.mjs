@@ -1,6 +1,5 @@
 // Testes de unidade das partes sem interface (rodam no Node): npm test
 import assert from 'node:assert/strict';
-import zlib from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -11,9 +10,7 @@ import { interpretBypass, chatPagePath, htmlTemplate, validateHtml, npcMultisell
 import { spawnsToXml, zonesToXml, spawnsToSql, npcTemplatesToXml, buildServerFiles, validateProject } from '../src/l2/serverExport.js';
 import { parseItemsFile, ItemDB } from '../src/l2/items.js';
 import { defaultProject, normalizeProject, DEFAULT_BYPASS, npcDefaults } from '../src/core/state.js';
-import { encodeGrayPNG } from '../src/core/png.js';
 import { ZipWriter } from '../src/core/zip.js';
-import { toUERotator, toUELocation, landscapeParams } from '../src/ue5/coords.js';
 
 let passed = 0;
 const tests = [];
@@ -37,25 +34,6 @@ test('heading do L2: 0 = leste, 90° = 16384, volta completa', () => {
   assert.equal(degToHeading(360), 0);
   assert.equal(degToHeading(-90), 49152);
   assert.equal(headingToDeg(49152), 270);
-});
-
-test('conversão para o UE5: cm, eixos e yaw', () => {
-  assert.deepEqual(toUELocation([1, 2, 3]), [100, 300, 200]);
-  assert.deepEqual(toUERotator([0, 0, 0]), [0, 0, 0]);
-  // girar +90° no editor (em torno de Y) = yaw -90° no UE
-  assert.deepEqual(toUERotator([0, 90, 0]), [0, -90, 0]);
-  assert.deepEqual(toUERotator([0, -30, 0]), [0, 30, 0]);
-});
-
-test('parâmetros do Landscape cobrem a altura sem estourar 16 bits', () => {
-  const lp = landscapeParams(-10, 120, 512, 253);
-  assert.equal(lp.components, 4);
-  assert.ok(Math.abs(lp.xyScale - 203.175) < 0.01);
-  assert.ok(lp.toValue(120) <= 65535 && lp.toValue(120) > 60000);
-  assert.equal(lp.toValue(0), 32768);
-  // valor -> cm pela fórmula do UE
-  const cm = ((lp.toValue(100) - 32768) * lp.zScale) / 128;
-  assert.ok(Math.abs(cm - 10000) < lp.zScale);
 });
 
 // ---------------------------------------------------------------- multisell
@@ -188,26 +166,7 @@ test('utilidades', () => {
   assert.equal(escapeXml('<a b="c">&'), '&lt;a b=&quot;c&quot;&gt;&amp;');
 });
 
-// ---------------------------------------------------------------- PNG e ZIP
-test('PNG 16 bits em tons de cinza: cabeçalho, CRC e pixels', async () => {
-  const w = 3, h = 2;
-  const px = new Uint16Array([0, 32768, 65535, 1, 2, 3]);
-  const png = await encodeGrayPNG(w, h, px, 16);
-  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  const dv = new DataView(png.buffer, png.byteOffset);
-  assert.equal(dv.getUint32(16), 3);
-  assert.equal(dv.getUint32(20), 2);
-  assert.equal(png[24], 16);
-  assert.equal(png[25], 0);
-  // IDAT começa depois do IHDR (8 + 25 bytes)
-  const idatLen = dv.getUint32(33);
-  const raw = zlib.inflateSync(png.subarray(41, 41 + idatLen));
-  assert.equal(raw.length, h * (w * 2 + 1));
-  assert.equal(raw[0], 0);
-  assert.equal((raw[3] << 8) | raw[4], 32768);
-  assert.equal((raw[5] << 8) | raw[6], 65535);
-});
-
+// ---------------------------------------------------------------- ZIP
 test('ZIP abre no Python (zipfile) com o conteúdo certo', async () => {
   const z = new ZipWriter();
   z.add('data/html/a.htm', '<html>olá ção</html>'.repeat(20));

@@ -139,9 +139,8 @@ const save = async (trigger, name) => {
   return file;
 };
 const srvZip = await save(() => page.click('.card .btn:has-text("Baixar pacote do servidor")'));
-const ueZip = await save(() => page.click('.card .btn:has-text("Baixar pacote UE5")'));
 await save(() => page.click('.card .btn:has-text("Salvar projeto")'), 'projeto.editorjogo.json');
-for (const z of [srvZip, ueZip]) {
+for (const z of [srvZip]) {
   const list = execFileSync('python3', ['-c', 'import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print("\\n".join(z.namelist()))', z]).toString().trim().split('\n');
   console.log(`   ${path.basename(z)}: ${list.length} arquivos (${list.slice(0, 6).join(', ')}${list.length > 6 ? ', …' : ''})`);
 }

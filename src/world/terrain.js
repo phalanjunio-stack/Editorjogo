@@ -618,7 +618,7 @@ export class Terrain {
     this.app.events?.emit('terrain-changed');
   }
 
-  // Importa heightmap de imagem (8 bits via canvas) ou RAW 16 bits (.r16/.raw do Unreal).
+  // Importa heightmap de imagem (8 bits via canvas) ou RAW 16 bits (.r16/.raw).
   importHeightmap({ image, raw16, rawSize, minH, maxH }) {
     const res = this.res;
     let get = () => 0;

@@ -1,4 +1,4 @@
-// EditorJogo — editor de mundo para servidores estilo Lineage 2 (L2J/L2Mobius) com exportação para UE5.
+// EditorJogo — editor de mundo para servidores estilo Lineage 2 (L2J/L2Mobius).
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import './style.css';
@@ -14,7 +14,6 @@ import { CityEditor } from './city/city.js';
 import { CapeLab } from './cloth/capeLab.js';
 import { ItemDB, parseItemsFile } from './l2/items.js';
 import { buildServerFiles } from './l2/serverExport.js';
-import { buildUE5Files } from './ue5/ue5Export.js';
 import { ZipWriter } from './core/zip.js';
 import { mundoMode } from './modes/mundo.js';
 import { terrenoMode, terrainState, withTerrainUndo, applyFoliagePreset } from './modes/terreno.js';
@@ -94,7 +93,7 @@ class App {
     this.menuRow = el('nav', { class: 'menus' });
     this.playBtn = el('button', { class: 'play-btn', type: 'button', title: 'Andar pelo mapa e falar com os NPCs (F5)' }, icon('play', 14), el('span', {}, 'Play (F5)'));
     this.playBtn.addEventListener('click', () => this.togglePlay());
-    const exportBtn = el('button', { class: 'top-btn', type: 'button', title: 'Exportar para o servidor e para o UE5' }, icon('package', 15), el('span', {}, 'Exportar'));
+    const exportBtn = el('button', { class: 'top-btn', type: 'button', title: 'Gerar os arquivos do servidor' }, icon('package', 15), el('span', {}, 'Exportar'));
     exportBtn.addEventListener('click', () => this.setMode('exportar'));
     this.serverSel = el('select', { class: 'server-sel', title: 'Pacote do servidor' },
       el('option', { value: 'l2mobius' }, 'Servidor: L2Mobius'),
@@ -173,7 +172,6 @@ class App {
         { label: 'Salvar', icon: 'save', shortcut: 'Ctrl+S', action: () => this.saveProject() },
         { sep: true },
         { label: 'Exportar pacote do servidor (.zip)', icon: 'server', action: () => this.exportServer() },
-        { label: 'Exportar para Unreal Engine 5 (.zip)', icon: 'package', action: () => this.exportUE5() },
         { label: 'Painel de exportação…', icon: 'sliders', action: () => this.setMode('exportar') },
         { sep: true },
         { label: 'Importar malha (GLB/FBX/OBJ)…', icon: 'upload', action: () => { this.setMode('objetos'); objetosMode.importMesh(); } },
@@ -487,7 +485,7 @@ class App {
     });
   }
 
-  // Voo estilo Unreal: segure o botão direito e use W A S D (Q/E desce/sobe, Shift = rápido).
+  // Voo livre: segure o botão direito e use W A S D (Q/E desce/sobe, Shift = rápido).
   _fly(dt) {
     if (!this.rmbDown || !this.keys.size) return;
     const dist = this.camera.position.distanceTo(this.controls.target);
@@ -895,18 +893,6 @@ class App {
     const { files, warnings } = buildServerFiles(this.project, { heightAt: (x, z) => this.terrain.heightAt(x, z), itemName: (id) => this.itemDB.name(id) });
     const size = await this._zip(files, `servidor_${slug(this.project.name)}.zip`);
     toast(`Pacote do servidor gerado (${files.length} arquivos, ${formatBytes(size)}).${warnings.length ? ` ${warnings.length} avisos — veja em Exportar.` : ''}`, warnings.length ? 'warn' : 'ok', 5000);
-  }
-
-  async exportUE5() {
-    this.log('Gerando pacote UE5…');
-    try {
-      const files = await buildUE5Files(this);
-      const size = await this._zip(files, `ue5_${slug(this.project.name)}.zip`);
-      toast(`Pacote UE5 gerado (${files.length} arquivos, ${formatBytes(size)}).`, 'ok', 5000);
-    } catch (err) {
-      console.error(err);
-      toast(`Erro ao gerar pacote UE5: ${err.message}`, 'error', 8000);
-    }
   }
 
   // ---------------------------------------------------------------- loop

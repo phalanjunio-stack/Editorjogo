@@ -1,4 +1,4 @@
-// Aba "Exportar": configurações do servidor, validação e pacotes (.zip) para o servidor e para o UE5.
+// Aba "Exportar": configurações do servidor, validação e pacote (.zip) com os arquivos do servidor.
 import { section, number, select, text, button, buttonRow, hint, el, slider } from '../ui/ui.js';
 import { icon } from '../ui/icons.js';
 import { buildServerFiles, validateProject } from '../l2/serverExport.js';
@@ -10,9 +10,9 @@ export const exportMode = {
   label: 'Exportar',
   icon: 'package',
   tab: false,
-  title: 'Gerar arquivos para o servidor L2 e para o Unreal Engine 5',
+  title: 'Gerar os arquivos do servidor L2',
   view: 'doc',
-  hint: 'Baixe o pacote do servidor (XML/HTML/SQL) e o pacote do UE5 (heightmap, camadas, malhas e script).',
+  hint: 'Baixe o pacote do servidor: lojas, diálogos, spawns, zonas e NPCs novos, com um LEIA-ME de onde colocar cada arquivo.',
 
   enter(app) {
     this.app = app;
@@ -82,17 +82,6 @@ export const exportMode = {
     srv.append(this._viewerTitle, this._viewer);
     root.append(srv);
 
-    const ue = el('div', { class: 'card' }, el('h3', { class: 'with-ico' }, icon('package', 15), 'Pacote do Unreal Engine 5'),
-      el('p', {}, 'Heightmap 16 bits (PNG e RAW) com os valores de escala certos, uma imagem por camada de textura, todas as peças da cidade em GLB, a capa atual, cena.json com as posições e o script Python que monta tudo no UE5.'));
-    buttonRow(ue,
-      button(null, 'Baixar pacote UE5 (.zip)', async (e) => {
-        const btn = e.currentTarget;
-        btn.disabled = true;
-        try { await app.exportUE5(); } finally { btn.disabled = false; }
-      }, { variant: 'primary', icon: 'download' }),
-    );
-    ue.append(el('p', { class: 'hint' }, 'No UE5: importe o heightmap pelo modo Landscape usando as escalas do LEIA-ME_UE5.txt, depois rode importar_cena.py (Tools > Execute Python Script).'));
-    root.append(ue);
 
     const w = validateProject(p);
     const wc = el('div', { class: `card ${w.length ? 'warn' : 'ok'}` }, el('h3', { class: 'with-ico' }, icon(w.length ? 'info' : 'check', 15), w.length ? `${w.length} avisos` : 'Tudo certo'));
@@ -113,7 +102,6 @@ export const exportMode = {
     else v.append(el('ul', { class: 'warn-list' }, ...w.map((x) => el('li', {}, x))));
     const q = section(root, 'Exportar agora', { icon: 'download' });
     button(q, 'Pacote do servidor (.zip)', () => app.exportServer(), { variant: 'primary', icon: 'server' });
-    button(q, 'Pacote UE5 (.zip)', () => app.exportUE5(), { icon: 'package' });
     button(q, 'Salvar projeto (.json)', () => app.saveProject(), { icon: 'save' });
   },
 };

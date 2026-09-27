@@ -1,5 +1,5 @@
 // Simulação de tecido (Verlet + restrições de distância), usada em capas, saias/mantos e bandeiras.
-// Parecido com o Chaos Cloth do UE5 em espírito, mas simples de ajustar: rigidez, dobra, peso,
+// Simples de ajustar: rigidez, dobra, peso,
 // amortecimento, vento e colisão com cápsulas do corpo.
 import * as THREE from 'three';
 import { rng, clamp } from '../core/util.js';
@@ -306,26 +306,6 @@ export class ClothSim {
     this.geometry.attributes.position.needsUpdate = true;
     this.geometry.computeVertexNormals();
     this.geometry.computeBoundingSphere();
-  }
-
-  // Geometria estática na pose de repouso (para exportar ao UE5), com cor de vértice:
-  // vermelho = vértice preso (Max Distance 0 no Chaos Cloth), preto = livre.
-  restGeometry() {
-    const geo = this.geometry.clone();
-    const pa = geo.attributes.position.array;
-    const col = new Float32Array(pa.length);
-    const vp = this.vertexParticle;
-    for (let v = 0; v < vp.length; v++) {
-      const k = vp[v];
-      pa[v * 3] = this.rest[k * 3];
-      pa[v * 3 + 1] = this.rest[k * 3 + 1];
-      pa[v * 3 + 2] = this.rest[k * 3 + 2];
-      const pinned = this.invMass[k] === 0;
-      col[v * 3] = pinned ? 1 : 0;
-    }
-    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    geo.computeVertexNormals();
-    return geo;
   }
 
   dispose() {

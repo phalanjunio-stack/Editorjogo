@@ -1,5 +1,5 @@
 // Aba "Capa/Roupa": física de tecido para capas, mantos/saias e bandeiras.
-import { section, slider, select, checkbox, color, button, buttonRow, hint, el, text, pickFiles, readFileAs, toast, downloadBlob } from '../ui/ui.js';
+import { section, slider, select, checkbox, color, button, buttonRow, hint, el, text, pickFiles, readFileAs, toast } from '../ui/ui.js';
 import { CLOTH_PRESETS } from '../cloth/capeLab.js';
 import { defaultClothPreset } from '../core/state.js';
 
@@ -163,13 +163,6 @@ export const clothMode = {
       app.refreshRight();
       toast('Modelo salvo no projeto.', 'ok');
     }, { icon: 'save' });
-    hint(pr, 'Botão direito num modelo ★ seu para apagar.');
-
-    const ex = section(root, 'Exportar para o UE5', { icon: 'package' });
-    button(ex, 'Baixar malha + ajustes', async () => {
-      const files = await lab.exportFiles();
-      for (const f of files) await downloadBlob(f.data, f.path, f.path.endsWith('.json') ? 'application/json' : 'model/gltf-binary');
-    }, { icon: 'download' });
-    hint(ex, 'A malha sai em pose de repouso com os vértices presos marcados em vermelho (cor de vértice). No UE5 use Clothing > Create Clothing Data e pinte Max Distance = 0 nesses vértices. O pacote UE5 (aba Exportar) já inclui a capa atual.');
+    hint(pr, 'Botão direito num modelo ★ seu para apagar. A roupa atual é a que o personagem usa no modo Play.');
   },
 };

@@ -164,7 +164,7 @@ export const terrenoMode = {
     slider(gen, 'Neve acima de (m)', st.auto, 'snowHeight', { min: 0, max: 300, step: 1 });
 
     const imp = section(root, 'Importar e Tamanho', { icon: 'upload', open: false });
-    hint(imp, 'PNG/JPG em tons de cinza ou RAW 16 bits (.r16/.raw) do Unreal, World Machine ou Gaea.');
+    hint(imp, 'PNG/JPG em tons de cinza ou RAW 16 bits (.r16/.raw) — por exemplo de programas como World Machine ou Gaea.');
     slider(imp, 'Altura do preto (m)', st.imp, 'minH', { min: -100, max: 100, step: 1 });
     slider(imp, 'Altura do branco (m)', st.imp, 'maxH', { min: 0, max: 600, step: 1 });
     button(imp, 'Importar heightmap…', () => this._import(app), { icon: 'map' });

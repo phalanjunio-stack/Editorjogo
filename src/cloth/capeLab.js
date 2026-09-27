@@ -6,8 +6,7 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
 import { ClothSim, makeClothMeshes, disposeClothMeshes } from './cloth.js';
 import { Mannequin } from './mannequin.js';
-import { DEG, slug } from '../core/util.js';
-import { exportGLB } from '../ue5/ue5Export.js';
+import { DEG } from '../core/util.js';
 
 export const CLOTH_PRESETS = [
   { name: 'Capa de cavaleiro', type: 'capa', width: 0.9, length: 1.25, cols: 16, rows: 22, shape: 'reta', flare: 0.35, stiffness: 0.95, bend: 0.35, damping: 0.02, mass: 1, colorOuter: '#7a1020', colorInner: '#c8a24a' },
@@ -295,38 +294,5 @@ export class CapeLab {
     const y = this.preset.type === 'bandeira' ? 4 : 1.1;
     this.controls.target.set(p.x, y, p.z);
     this.camera.position.set(p.x + 2.6, y + 0.8, p.z - 3.6);
-  }
-
-  // ---------------------------------------------------------- exportação
-  async exportFiles() {
-    const P = this.preset;
-    const name = slug(P.name || 'capa');
-    const geo = this.sim.restGeometry();
-    const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: P.colorOuter, side: THREE.DoubleSide, vertexColors: false, name: 'Tecido' }));
-    mesh.name = `SK_${name}`;
-    const glb = await exportGLB(mesh);
-    geo.dispose();
-    const info = {
-      nome: P.name,
-      tipo: P.type,
-      dimensoes: { largura: P.width, comprimento: P.length, colunas: P.cols, linhas: P.rows, formato: P.shape, abertura: P.flare },
-      fisica: { gravidade: P.gravity, rigidez: P.stiffness, dobra: P.bend, amortecimento: P.damping, iteracoes: P.iterations, massa: P.mass },
-      vento: { forca: P.windStrength, turbulencia: P.windTurbulence },
-      cores: { externa: P.colorOuter, interna: P.colorInner },
-      sugestao_chaos_cloth_ue5: {
-        EdgeStiffness: Math.round(P.stiffness * 100) / 100,
-        BendingStiffness: Math.round(P.bend * 100) / 100,
-        Damping: Math.round(P.damping * 100) / 100,
-        Density: Math.round(P.mass * 0.35 * 100) / 100,
-        Drag: 0.07 + P.windStrength * 0.01,
-        Lift: 0.07 + P.windStrength * 0.01,
-        MaxDistance_vertices_presos: 0,
-        MaxDistance_resto: Math.round(P.length * 100),
-      },
-    };
-    return [
-      { path: `capa_${name}.glb`, data: glb },
-      { path: `capa_${name}.json`, data: JSON.stringify(info, null, 2) },
-    ];
   }
 }
