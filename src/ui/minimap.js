@@ -67,7 +67,8 @@ export class Minimap {
     const T = this.app.terrain;
     const ctx = this.base.getContext('2d');
     const img = ctx.createImageData(BASE, BASE);
-    const cols = LAYER_UI_COLORS.map(hexToRgb);
+    // cor média de cada textura (cai para as cores fixas se ainda não houver)
+    const cols = LAYER_UI_COLORS.map((h, i) => T.layerAvg?.[i] || hexToRgb(h));
     const water = this.app.project.terrain.waterEnabled ? this.app.project.terrain.waterLevel : -1e9;
     const range = Math.max(1, T.maxH - T.minH);
     for (let j = 0; j < BASE; j++) {

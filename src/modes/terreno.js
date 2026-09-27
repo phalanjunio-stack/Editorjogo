@@ -1,6 +1,8 @@
 // Aba "Terreno": esculpir, pintar 8 camadas, gerar/importar relevo e sistema de grama e folhagem.
 import * as THREE from 'three';
-import { section, slider, number, select, checkbox, color, button, buttonRow, hint, toolGrid, thumbGrid, el, pickFiles, readFileAs, toast, text } from '../ui/ui.js';
+import { section, slider, number, select, checkbox, color, button, buttonRow, hint, toolGrid, thumbGrid, el, ico, pickFiles, readFileAs, toast, text } from '../ui/ui.js';
+import { importTextureSet, importSingleMap } from '../world/pbrImport.js';
+import { classifyTexture } from '../world/pbrNames.js';
 import { LAYER_UI_COLORS } from '../world/terrain.js';
 import { FOLIAGE_PRESETS } from '../core/state.js';
 import { foliageThumb, textureThumb } from '../ui/thumbs.js';
@@ -237,29 +239,60 @@ export const terrenoMode = {
     const lay = section(root, `Camada: ${l.name}`, { icon: 'image' });
     const big = el('div', { class: 'prop-preview' });
     big.style.backgroundImage = `url("${textureThumb(app.terrain.layerTextures[i])}")`;
-    lay.append(el('div', { class: 'prop-head' }, big, el('div', {}, el('b', {}, l.name), el('div', { class: 'hint' }, `Camada ${i + 1} de 8`))));
+    const mapsIn = ['texture', 'normal', 'rough', 'ao'].filter((k) => l[k]).length;
+    lay.append(el('div', { class: 'prop-head' }, big, el('div', {}, el('b', {}, l.name),
+      el('div', { class: 'hint' }, `Camada ${i + 1} de 8 • ${l.texture ? `${mapsIn} mapa${mapsIn > 1 ? 's' : ''} PBR` : 'textura padrão'}`))));
     text(lay, 'Nome', l, 'name', { onChange: () => { app.markDirty(); app.refreshLeft(); } });
-    slider(lay, 'Repetição', l, 'tiling', { min: 0.02, max: 1, step: 0.01, onChange: () => app.terrain.setTiling(p.terrain.layers) });
-    buttonRow(lay,
-      button(null, 'Carregar imagem', async () => {
-        const [f] = await pickFiles('image/*');
+    const apply = async (msg) => {
+      await app.terrain.setLayer(i, l);
+      app.markDirty();
+      app.refreshPanels();
+      if (msg) app.log(msg, 'ok');
+    };
+    button(lay, 'Carregar textura PBR (.zip ou imagens)…', async () => {
+      const files = await pickFiles('.zip,.png,.jpg,.jpeg,.webp,.tga,.bmp', true);
+      if (!files.length) return;
+      try {
+        app.log(`Lendo ${files.length} arquivo(s)…`);
+        const r = await importTextureSet(files);
+        Object.assign(l, { texture: null, normal: null, rough: null, ao: null }, r.maps, { normalDX: r.normalDX });
+        await apply(`${l.name}: ${r.found.join(', ')}.`);
+      } catch (err) {
+        toast(`Não deu para importar: ${err.message}`, 'error', 6000);
+      }
+    }, { variant: 'primary', icon: 'upload', title: 'O .zip baixado do Poly Haven ou ambientCG, ou as imagens do conjunto (cor, normal, rugosidade, AO)' });
+
+    const slots = el('div', { class: 'map-slots' });
+    for (const [key, label] of [['texture', 'Cor'], ['normal', 'Normal'], ['rough', 'Rugosidade'], ['ao', 'Oclusão (AO)']]) {
+      const img = el('div', { class: 'map-img' });
+      if (l[key]) img.style.backgroundImage = `url("${l[key]}")`;
+      else img.append(el('span', {}, key === 'texture' ? 'padrão' : key === 'normal' ? 'da cor' : '—'));
+      const load = el('button', { class: 'ibtn tiny', type: 'button', title: `Carregar ${label}` }, ico('upload', 12));
+      load.addEventListener('click', async () => {
+        const [f] = await pickFiles('.png,.jpg,.jpeg,.webp,.tga,.bmp');
         if (!f) return;
-        l.texture = await readFileAs(f, 'dataurl');
-        await app.terrain.setLayerTexture(i, l.texture);
-        app.markDirty();
-        app.refreshPanels();
-        app.contentBrowser.render();
-        toast(`Textura de ${l.name} trocada.`, 'ok');
-      }, { icon: 'image' }),
-      button(null, 'Padrão', async () => {
-        l.texture = null;
-        await app.terrain.setLayerTexture(i, null);
-        app.markDirty();
-        app.refreshPanels();
-        app.contentBrowser.render();
-      }),
-    );
-    hint(lay, 'Use fotos de textura que repetem sem emenda (seamless) — por exemplo das bibliotecas gratuitas de PBR.');
+        try {
+          l[key] = await importSingleMap(f);
+          if (key === 'normal') l.normalDX = classifyTexture(f.name).dx;
+          await apply(`${l.name}: ${label.toLowerCase()} carregada.`);
+        } catch (err) {
+          toast(`Erro: ${err.message}`, 'error');
+        }
+      });
+      const rm = el('button', { class: 'ibtn tiny', type: 'button', title: `Tirar ${label}`, disabled: !l[key] }, ico('x', 12));
+      rm.addEventListener('click', async () => { l[key] = null; await apply(); });
+      slots.append(el('div', { class: 'map-slot' }, img, el('span', { class: 'map-label' }, label), el('div', { class: 'map-btns' }, load, rm)));
+    }
+    lay.append(slots);
+    slider(lay, 'Repetição', l, 'tiling', { min: 0.02, max: 1, step: 0.01, onChange: () => app.terrain.setTiling(p.terrain.layers), title: 'Menor = textura maior no chão' });
+    slider(lay, 'Força do relevo', l, 'normalStrength', { min: 0, max: 3, step: 0.05, onChange: () => { app.terrain.setTiling(p.terrain.layers); app.markDirty(); } });
+    if (!l.rough) slider(lay, 'Rugosidade', l, 'roughness', { min: 0.05, max: 1, step: 0.01, onCommit: () => apply(), title: 'Baixo = brilhante/molhado, alto = fosco' });
+    checkbox(lay, 'Normal no padrão DirectX (Unreal)', l, 'normalDX', { onChange: () => apply(), title: 'Marque se o relevo parecer "afundado" onde deveria saltar' });
+    button(lay, 'Voltar para a textura padrão', async () => {
+      Object.assign(l, { texture: null, normal: null, rough: null, ao: null, normalDX: false });
+      await apply(`${l.name}: textura padrão.`);
+    }, { icon: 'rotate' });
+    hint(lay, 'Texturas realistas grátis para qualquer uso (CC0): polyhaven.com e ambientcg.com. Baixe em 1K ou 2K e escolha o .zip aqui.');
 
     const g = p.grass;
     const gp = FOLIAGE_PRESETS.find((x) => x.id === g.preset);

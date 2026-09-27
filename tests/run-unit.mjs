@@ -11,6 +11,8 @@ import { spawnsToXml, zonesToXml, spawnsToSql, npcTemplatesToXml, buildServerFil
 import { parseItemsFile, ItemDB } from '../src/l2/items.js';
 import { defaultProject, normalizeProject, DEFAULT_BYPASS, npcDefaults } from '../src/core/state.js';
 import { ZipWriter } from '../src/core/zip.js';
+import { readZip } from '../src/core/unzip.js';
+import { classifyTexture, assignTextureSet } from '../src/world/pbrNames.js';
 
 let passed = 0;
 const tests = [];
@@ -189,6 +191,53 @@ print(json.dumps({n: z.read(n).decode('latin1') for n in z.namelist()}))`, file]
   assert.deepEqual(Object.keys(out), ['data/html/a.htm', 'LEIA-ME.txt', 'bin.dat']);
   assert.equal(Buffer.from(out['data/html/a.htm'], 'latin1').toString('utf8'), '<html>olá ção</html>'.repeat(20));
   assert.deepEqual([...Buffer.from(out['bin.dat'], 'latin1')], [0, 1, 2, 255]);
+});
+
+test('ZIP: o leitor abre o que o gerador cria (com e sem compressão)', async () => {
+  const z = new ZipWriter();
+  const big = 'textura '.repeat(500);
+  z.add('pasta/a.txt', big);
+  z.add('b.bin', new Uint8Array([9, 8, 7]));
+  const files = await readZip(await z.build());
+  assert.deepEqual(files.map((f) => f.name), ['pasta/a.txt', 'b.bin']);
+  assert.equal(new TextDecoder().decode(files[0].bytes), big);
+  assert.deepEqual([...files[1].bytes], [9, 8, 7]);
+});
+
+test('texturas PBR: reconhece os nomes do Poly Haven, ambientCG, Megascans e Unreal', () => {
+  const k = (n) => classifyTexture(n).kind;
+  // Poly Haven
+  assert.equal(k('aerial_rocks_02_diff_2k.jpg'), 'color');
+  assert.deepEqual(classifyTexture('aerial_rocks_02_nor_gl_2k.jpg'), { kind: 'normal', dx: false });
+  assert.deepEqual(classifyTexture('aerial_rocks_02_nor_dx_2k.jpg'), { kind: 'normal', dx: true });
+  assert.equal(k('aerial_rocks_02_rough_2k.jpg'), 'rough');
+  assert.equal(k('aerial_rocks_02_arm_2k.jpg'), 'orm');
+  assert.equal(k('aerial_rocks_02_disp_2k.png'), null);
+  // ambientCG
+  assert.equal(k('Rock030_2K-JPG_Color.jpg'), 'color');
+  assert.deepEqual(classifyTexture('Rock030_2K-JPG_NormalDX.jpg'), { kind: 'normal', dx: true });
+  assert.deepEqual(classifyTexture('Rock030_2K-JPG_NormalGL.jpg'), { kind: 'normal', dx: false });
+  assert.equal(k('Rock030_2K-JPG_Roughness.jpg'), 'rough');
+  assert.equal(k('Rock030_2K-JPG_AmbientOcclusion.jpg'), 'ao');
+  assert.equal(k('Rock030_2K-JPG_Displacement.jpg'), null);
+  // Megascans
+  assert.equal(k('Cliff_Rock_Albedo.jpg'), 'color');
+  assert.equal(k('Cliff_Rock_AO.jpg'), 'ao');
+  // Unreal (T_Nome_Sufixo; normal padrão DirectX)
+  assert.equal(k('T_Ground_D.tga'), 'color');
+  assert.deepEqual(classifyTexture('T_Ground_N.tga'), { kind: 'normal', dx: true });
+  assert.equal(k('T_Ground_ORM.png'), 'orm');
+  assert.equal(k('leia-me.txt'), null);
+});
+
+test('texturas PBR: monta o conjunto e prefere a normal OpenGL', () => {
+  const set = assignTextureSet(['Rock030.png', 'Rock030_2K-JPG_Color.jpg', 'Rock030_2K-JPG_NormalDX.jpg', 'Rock030_2K-JPG_NormalGL.jpg', 'Rock030_2K-JPG_Roughness.jpg', 'Rock030_2K-JPG_Displacement.jpg']);
+  assert.equal(set.color, 'Rock030_2K-JPG_Color.jpg');
+  assert.equal(set.normal, 'Rock030_2K-JPG_NormalGL.jpg');
+  assert.equal(set.normalDX, false);
+  assert.equal(set.rough, 'Rock030_2K-JPG_Roughness.jpg');
+  // um arquivo só, sem nome conhecido: vira a cor
+  assert.deepEqual(assignTextureSet(['minha_grama.png']), { normalDX: false, color: 'minha_grama.png' });
 });
 
 for (const t of tests) {

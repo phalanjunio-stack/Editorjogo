@@ -250,19 +250,3 @@ export function makeWaterNormalTexture(size = 256) {
   });
   return toTexture(canvas, false);
 }
-
-export function loadImageTexture(dataUrl) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const tex = new THREE.Texture(img);
-      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-      tex.colorSpace = THREE.SRGBColorSpace;
-      tex.anisotropy = 8;
-      tex.needsUpdate = true;
-      resolve(tex);
-    };
-    img.onerror = reject;
-    img.src = dataUrl;
-  });
-}

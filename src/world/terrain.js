@@ -3,7 +3,10 @@
 import * as THREE from 'three';
 import { Noise2D } from '../core/noise.js';
 import { clamp, lerp, smoothstep, float32ToBase64, base64ToFloat32, bytesToBase64, base64ToBytes } from '../core/util.js';
-import { LAYER_GENERATORS, loadImageTexture } from './textures.js';
+import { LAYER_GENERATORS } from './textures.js';
+import { LayerTextures } from './layerTextures.js';
+import { loadDataUrl } from './pbrImport.js';
+import { DEFAULT_LAYERS } from '../core/state.js';
 
 export const LAYERS = 8;
 export const LAYER_UI_COLORS = ['#6dbb4a', '#a57a4a', '#9a9a9a', '#e8f0ff', '#d9c08a', '#5e4a34', '#8f8a80', '#b89a70'];
@@ -20,16 +23,10 @@ varying vec3 vTWorld;
 varying vec3 vTNormal;
 uniform sampler2D uSplatA;
 uniform sampler2D uSplatB;
-uniform sampler2D uTex0;
-uniform sampler2D uTex1;
-uniform sampler2D uTex2;
-uniform sampler2D uTex3;
-uniform sampler2D uTex4;
-uniform sampler2D uTex5;
-uniform sampler2D uTex6;
-uniform sampler2D uTex7;
-uniform vec4 uTilingA;
-uniform vec4 uTilingB;
+uniform sampler2DArray uAlbedoArr;
+uniform sampler2DArray uNormalArr;
+uniform float uTiling[8];
+uniform float uNormalStr[8];
 uniform vec2 uBrushPos;
 uniform float uBrushRadius;
 uniform float uBrushOn;
@@ -45,45 +42,83 @@ float tNoise(vec2 p) {
   vec2 u = f * f * (3.0 - 2.0 * f);
   return mix(mix(tHash(i), tHash(i + vec2(1.0, 0.0)), u.x), mix(tHash(i + vec2(0.0, 1.0)), tHash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
-vec3 triSample(sampler2D t, float s, vec3 bw) {
-  vec3 p = vTWorld * s;
-#ifdef TRIPLANAR
-  return texture2D(t, p.zy).rgb * bw.x + texture2D(t, p.xz).rgb * bw.y + texture2D(t, p.xy).rgb * bw.z;
-#else
-  return texture2D(t, p.xz).rgb;
-#endif
-}
 `;
 
+// Mistura as 8 camadas. Só amostra as camadas presentes no ponto (textureGrad mantém o mipmap
+// correto mesmo dentro do "if"). Normal triplanar com "whiteout blend".
 const FRAG_BLEND = /* glsl */ `
   vec4 swA = texture2D(uSplatA, vTUv);
   vec4 swB = texture2D(uSplatB, vTUv);
-  float swSum = max(swA.r + swA.g + swA.b + swA.a + swB.r + swB.g + swB.b + swB.a, 1e-4);
-  swA /= swSum;
-  swB /= swSum;
-  vec3 tn = normalize(vTNormal);
-  vec3 bw = pow(abs(tn), vec3(6.0));
+  float tW[8];
+  tW[0] = swA.r; tW[1] = swA.g; tW[2] = swA.b; tW[3] = swA.a;
+  tW[4] = swB.r; tW[5] = swB.g; tW[6] = swB.b; tW[7] = swB.a;
+  float tSum = max(swA.r + swA.g + swA.b + swA.a + swB.r + swB.g + swB.b + swB.a, 1e-4);
+  vec3 tN = normalize(vTNormal);
+  vec3 bw = pow(abs(tN), vec3(6.0));
   bw /= (bw.x + bw.y + bw.z);
-  vec3 tcol = vec3(0.0);
-  tcol += triSample(uTex0, uTilingA.x, bw) * swA.r;
-  tcol += triSample(uTex1, uTilingA.y, bw) * swA.g;
-  tcol += triSample(uTex2, uTilingA.z, bw) * swA.b;
-  tcol += triSample(uTex3, uTilingA.w, bw) * swA.a;
-  tcol += triSample(uTex4, uTilingB.x, bw) * swB.r;
-  tcol += triSample(uTex5, uTilingB.y, bw) * swB.g;
-  tcol += triSample(uTex6, uTilingB.z, bw) * swB.b;
-  tcol += triSample(uTex7, uTilingB.w, bw) * swB.a;
-  float macro = 0.8 + 0.35 * tNoise(vTWorld.xz * 0.012) + 0.1 * tNoise(vTWorld.xz * 0.07);
-  diffuseColor.rgb *= tcol * macro;
+  vec3 tAxis = sign(tN);
+  vec3 tP = vTWorld;
+  vec3 tDx = dFdx(tP), tDy = dFdy(tP);
+  vec3 tAlb = vec3(0.0);
+  vec3 tNrm = vec3(0.0);
+  float tAO = 0.0;
+  float tRough = 0.0;
+  for (int i = 0; i < 8; i++) {
+    float wi = tW[i] / tSum;
+    if (wi < 0.004) continue;
+    float s = uTiling[i];
+    float L = float(i);
+    float ns = uNormalStr[i];
+#ifdef TRIPLANAR
+    vec4 aX = textureGrad(uAlbedoArr, vec3(tP.zy * s, L), tDx.zy * s, tDy.zy * s);
+    vec4 aY = textureGrad(uAlbedoArr, vec3(tP.xz * s, L), tDx.xz * s, tDy.xz * s);
+    vec4 aZ = textureGrad(uAlbedoArr, vec3(tP.xy * s, L), tDx.xy * s, tDy.xy * s);
+    vec4 nX = textureGrad(uNormalArr, vec3(tP.zy * s, L), tDx.zy * s, tDy.zy * s);
+    vec4 nY = textureGrad(uNormalArr, vec3(tP.xz * s, L), tDx.xz * s, tDy.xz * s);
+    vec4 nZ = textureGrad(uNormalArr, vec3(tP.xy * s, L), tDx.xy * s, tDy.xy * s);
+    vec4 a = aX * bw.x + aY * bw.y + aZ * bw.z;
+    vec3 tnX = nX.xyz * 2.0 - 1.0; tnX.xy *= ns; tnX.z *= tAxis.x;
+    vec3 tnY = nY.xyz * 2.0 - 1.0; tnY.xy *= ns; tnY.z *= tAxis.y;
+    vec3 tnZ = nZ.xyz * 2.0 - 1.0; tnZ.xy *= ns; tnZ.z *= tAxis.z;
+    tnX = vec3(tnX.xy + tN.zy, abs(tnX.z) * tN.x);
+    tnY = vec3(tnY.xy + tN.xz, abs(tnY.z) * tN.y);
+    tnZ = vec3(tnZ.xy + tN.xy, abs(tnZ.z) * tN.z);
+    vec3 nw = normalize(tnX.zyx * bw.x + tnY.xzy * bw.y + tnZ.xyz * bw.z);
+    float rg = nX.a * bw.x + nY.a * bw.y + nZ.a * bw.z;
+#else
+    vec4 a = textureGrad(uAlbedoArr, vec3(tP.xz * s, L), tDx.xz * s, tDy.xz * s);
+    vec4 nn = textureGrad(uNormalArr, vec3(tP.xz * s, L), tDx.xz * s, tDy.xz * s);
+    vec3 tnY = nn.xyz * 2.0 - 1.0; tnY.xy *= ns;
+    tnY = vec3(tnY.xy + tN.xz, abs(tnY.z) * tN.y);
+    vec3 nw = normalize(tnY.xzy);
+    float rg = nn.a;
+#endif
+    tAlb += a.rgb * wi;
+    tAO += a.a * wi;
+    tNrm += nw * wi;
+    tRough += rg * wi;
+  }
+  float macro = 0.86 + 0.24 * tNoise(vTWorld.xz * 0.012) + 0.08 * tNoise(vTWorld.xz * 0.07);
+  diffuseColor.rgb *= tAlb * mix(1.0, tAO, 0.85) * macro;
   float wet = 1.0 - smoothstep(uWaterLevel, uWaterLevel + 0.6, vTWorld.y);
   diffuseColor.rgb *= 1.0 - wet * 0.35;
+  tRough = mix(tRough, 0.25, wet * 0.7);
   if (uViewMode > 0.5) {
     // mapa de inclinação: verde = anda, amarelo = rampa, vermelho = parede (útil para geodata)
-    float slope = degrees(acos(clamp(tn.y, 0.0, 1.0)));
+    float slope = degrees(acos(clamp(tN.y, 0.0, 1.0)));
     vec3 sc = mix(vec3(0.2, 0.75, 0.3), vec3(0.95, 0.85, 0.2), smoothstep(15.0, 30.0, slope));
     sc = mix(sc, vec3(0.9, 0.2, 0.15), smoothstep(35.0, 45.0, slope));
     diffuseColor.rgb = sc * 0.8;
+    tNrm = tN;
   }
+`;
+
+const FRAG_ROUGH = /* glsl */ `
+  roughnessFactor = clamp(tRough, 0.04, 1.0);
+`;
+
+const FRAG_NORMAL = /* glsl */ `
+  normal = normalize((viewMatrix * vec4(normalize(tNrm), 0.0)).xyz);
 `;
 
 const FRAG_OVERLAY = /* glsl */ `
@@ -103,15 +138,18 @@ const FRAG_OVERLAY = /* glsl */ `
 `;
 
 export class Terrain {
-  constructor(app) {
+  constructor(app, { texSize = 1024 } = {}) {
     this.app = app;
-    this.proceduralTextures = LAYER_GENERATORS.map((g) => g());
-    this.layerTextures = [...this.proceduralTextures];
+    this.procedural = LAYER_GENERATORS.map((g) => g().image);
+    this.lt = new LayerTextures(texSize, LAYERS);
+    this._sig = new Array(LAYERS).fill('');
     this.uniforms = {
       uSplatA: { value: null },
       uSplatB: { value: null },
-      uTilingA: { value: new THREE.Vector4(0.25, 0.25, 0.12, 0.2) },
-      uTilingB: { value: new THREE.Vector4(0.2, 0.2, 0.3, 0.3) },
+      uAlbedoArr: { value: this.lt.albedo },
+      uNormalArr: { value: this.lt.normal },
+      uTiling: { value: new Float32Array(LAYERS).fill(0.25) },
+      uNormalStr: { value: new Float32Array(LAYERS).fill(1) },
       uViewMode: { value: 0 },
       uBrushPos: { value: new THREE.Vector2() },
       uBrushRadius: { value: 10 },
@@ -121,7 +159,11 @@ export class Terrain {
       uGridSize: { value: 4 },
       uWaterLevel: { value: -1000 },
     };
-    for (let i = 0; i < LAYERS; i++) this.uniforms[`uTex${i}`] = { value: this.layerTextures[i] };
+    for (let i = 0; i < LAYERS; i++) {
+      this.lt.setLayer(i, { color: this.procedural[i], roughness: DEFAULT_LAYERS[i].roughness });
+      this._sig[i] = this._signature(DEFAULT_LAYERS[i]);
+    }
+    this.setTiling(DEFAULT_LAYERS);
     this.material = this._makeMaterial();
     this.mesh = null;
     this.minH = 0;
@@ -148,9 +190,11 @@ export class Terrain {
       );
       shader.fragmentShader = FRAG_HEAD + shader.fragmentShader
         .replace('#include <map_fragment>', FRAG_BLEND)
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${FRAG_ROUGH}`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${FRAG_NORMAL}`)
         .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>\n${FRAG_OVERLAY}`);
     };
-    mat.customProgramCacheKey = () => `terreno-v2-${'TRIPLANAR' in mat.defines}`;
+    mat.customProgramCacheKey = () => `terreno-v3-${'TRIPLANAR' in mat.defines}`;
     return mat;
   }
 
@@ -646,20 +690,44 @@ export class Terrain {
   }
 
   // ---------------------------------------------------------------- texturas das camadas
-  async setLayerTexture(i, dataUrl) {
-    let tex = this.proceduralTextures[i];
-    if (dataUrl) {
-      try { tex = await loadImageTexture(dataUrl); } catch { tex = this.proceduralTextures[i]; }
-    }
-    if (this.layerTextures[i] !== this.proceduralTextures[i]) this.layerTextures[i].dispose();
-    this.layerTextures[i] = tex;
-    this.uniforms[`uTex${i}`].value = tex;
+  // Miniaturas (canvas) e cor média de cada camada, para o Navegador de Conteúdo e o minimapa.
+  get layerTextures() {
+    return this.lt.previews.map((c) => ({ image: c }));
+  }
+
+  get layerAvg() {
+    return this.lt.avg;
+  }
+
+  _signature(l) {
+    return [l.texture?.length || 0, l.normal?.length || 0, l.rough?.length || 0, l.ao?.length || 0, !!l.normalDX, l.roughness ?? 0.9].join('|');
+  }
+
+  // Aplica as imagens da camada (cor, normal, rugosidade, AO). Sem cor, usa a textura padrão.
+  async setLayer(i, layer) {
+    const sig = this._signature(layer);
+    if (sig === this._sig[i]) return;
+    const load = async (url) => {
+      if (!url) return null;
+      try { return await loadDataUrl(url); } catch { return null; }
+    };
+    const [color, normal, rough, ao] = await Promise.all([load(layer.texture), load(layer.normal), load(layer.rough), load(layer.ao)]);
+    this.lt.setLayer(i, { color: color || this.procedural[i], normal, rough, ao, normalDX: !!layer.normalDX, roughness: layer.roughness ?? 0.9 });
+    this._sig[i] = sig;
+    this.app.events?.emit('layers-changed');
+  }
+
+  setTextureSize(size) {
+    if (!this.lt.setSize(size)) return;
+    this.uniforms.uAlbedoArr.value = this.lt.albedo;
+    this.uniforms.uNormalArr.value = this.lt.normal;
   }
 
   setTiling(layers) {
-    const t = layers.map((l) => l.tiling);
-    this.uniforms.uTilingA.value.set(t[0], t[1], t[2], t[3]);
-    this.uniforms.uTilingB.value.set(t[4], t[5], t[6], t[7]);
+    for (let i = 0; i < LAYERS; i++) {
+      this.uniforms.uTiling.value[i] = layers[i]?.tiling ?? 0.25;
+      this.uniforms.uNormalStr.value[i] = layers[i]?.normalStrength ?? 1;
+    }
   }
 
   setTriplanar(on) {

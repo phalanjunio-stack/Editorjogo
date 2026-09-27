@@ -12,15 +12,18 @@ export const DEFAULT_BYPASS = {
 };
 
 export const LAYER_COUNT = 8;
+// Cada camada: cor (texture), normal, rugosidade (rough) e oclusão (ao) como imagens opcionais.
+// Sem imagem de cor usa a textura procedural; sem normal, o relevo é gerado a partir da cor.
+const layer = (name, tiling, roughness) => ({ name, tiling, roughness, normalStrength: 1, normalDX: false, texture: null, normal: null, rough: null, ao: null });
 export const DEFAULT_LAYERS = [
-  { name: 'Grama', tiling: 0.25, texture: null },
-  { name: 'Terra', tiling: 0.25, texture: null },
-  { name: 'Rocha', tiling: 0.12, texture: null },
-  { name: 'Neve', tiling: 0.2, texture: null },
-  { name: 'Areia', tiling: 0.2, texture: null },
-  { name: 'Lama', tiling: 0.2, texture: null },
-  { name: 'Pedra', tiling: 0.3, texture: null },
-  { name: 'Caminho', tiling: 0.3, texture: null },
+  layer('Grama', 0.25, 0.95),
+  layer('Terra', 0.25, 0.95),
+  layer('Rocha', 0.12, 0.85),
+  layer('Neve', 0.2, 0.55),
+  layer('Areia', 0.2, 0.95),
+  layer('Lama', 0.2, 0.6),
+  layer('Pedra', 0.3, 0.8),
+  layer('Caminho', 0.3, 0.95),
 ];
 
 // Tipos de folhagem (presets do sistema de grama).
@@ -133,8 +136,8 @@ export function normalizeProject(p) {
   out.server = { ...d.server, ...(p.server || {}) };
   out.server.bypass = { ...DEFAULT_BYPASS, ...((p.server && p.server.bypass) || {}) };
   out.terrain = { ...d.terrain, ...(p.terrain || {}) };
-  out.terrain.layers = (out.terrain.layers || d.terrain.layers).slice(0, LAYER_COUNT);
-  while (out.terrain.layers.length < LAYER_COUNT) out.terrain.layers.push({ ...DEFAULT_LAYERS[out.terrain.layers.length] });
+  const layers = (out.terrain.layers || []).slice(0, LAYER_COUNT);
+  out.terrain.layers = DEFAULT_LAYERS.map((def, i) => ({ ...def, ...(layers[i] || {}) }));
   out.sky = { ...d.sky, ...(p.sky || {}) };
   out.grass = { ...d.grass, ...(p.grass || {}) };
   out.cloth = { current: { ...defaultClothPreset(), ...((p.cloth && p.cloth.current) || {}) }, presets: (p.cloth && p.cloth.presets) || [] };

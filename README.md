@@ -22,7 +22,7 @@ clique no Chrome ou no Edge. É um arquivo só, funciona sem internet e sem inst
 npm install
 npm run dev      # abre em http://localhost:8080/EditorJogo.html e recompila ao salvar
 npm run build    # gera dist/EditorJogo.html
-npm test         # testes de unidade (XML, bypass, ZIP, coordenadas)
+npm test         # testes de unidade (XML, bypass, ZIP, coordenadas, nomes de textura)
 npm run smoke    # teste completo no navegador (precisa do Playwright)
 ```
 
@@ -31,7 +31,7 @@ npm run smoke    # teste completo no navegador (precisa do Playwright)
 | Aba | O que faz |
 |---|---|
 | **Mundo** | Hora do dia (amanhecer, meio-dia, pôr do sol, noite com estrelas), direção do sol, nuvens animadas, névoa, vento, água. |
-| **Terreno** | Levantar, Abaixar, Suavizar, Nivelar, Ruído, **Erosão**, Pintar e **Caminho** (aplaina e pinta estrada). 8 camadas de textura (Grama, Terra, Rocha, Neve, Areia, Lama, Pedra, Caminho) — dá para trocar qualquer uma por uma foto sua. Gerar montanhas/vale/colinas/ilha com área plana para a cidade, auto-pintar, importar heightmap (PNG ou RAW 16 bits). **Grama e folhagem** com vento e flores (Grama Curta, Grama Alta, Flor Silvestre, Campo Florido, Floresta, Capim Seco). |
+| **Terreno** | Levantar, Abaixar, Suavizar, Nivelar, Ruído, **Erosão**, Pintar e **Caminho** (aplaina e pinta estrada). 8 camadas de textura (Grama, Terra, Rocha, Neve, Areia, Lama, Pedra, Caminho) com **PBR completo** (cor, normal, rugosidade e AO) — veja [Texturas realistas](#texturas-realistas). Gerar montanhas/vale/colinas/ilha com área plana para a cidade, auto-pintar, importar heightmap (PNG ou RAW 16 bits). **Grama e folhagem** com vento e flores (Grama Curta, Grama Alta, Flor Silvestre, Campo Florido, Floresta, Capim Seco). |
 | **Objetos** | Escolha a peça no **Navegador de Conteúdo** (miniaturas 3D) e clique no chão. Gizmo W/E/R, grade/ímã, **muralha automática** com torres, **espalhar** árvores e pedras com pincel, **importar suas malhas** GLB/FBX/OBJ. Bandeiras com tecido de verdade balançando no vento. |
 | **NPC** | Coloca NPCs (viram spawns do servidor) com **Posição e Heading em coordenadas L2**, Level, HP, MP, raça, **IA** (agressivo, raio de visão), respawn, quantidade/raio, **Drop List**, página HTML e loja. Desenha **zonas** (paz, cidade, arena PvP...). |
 | **Roupa** | **Física de tecido**: capa (presa nos ombros), manto/saia (na cintura) e bandeira. Rigidez, dobra, peso, vento, colisão com o corpo, formato da ponta (reta, V, pontas, rasgada), cores e **emblema**. Testa num boneco andando/correndo — ou no seu personagem GLB/FBX (ex.: Mixamo) escolhendo o osso. |
@@ -43,6 +43,25 @@ npm run smoke    # teste completo no navegador (precisa do Playwright)
 Embaixo ficam o **Navegador de Conteúdo**, o **Minimapa** (clique para ir até o ponto; mostra
 coordenadas L2) e o **Log do Editor**. À direita, a **Hierarquia do Mundo** (com olho para esconder
 grama, água, objetos, NPCs e zonas) e as **Propriedades** do que estiver selecionado.
+
+## Texturas realistas
+
+Cada camada do terreno usa um conjunto PBR: **cor**, **normal** (relevo), **rugosidade** e **oclusão (AO)**.
+Em **Terreno › Propriedades** clique em *Carregar textura PBR* e escolha:
+
+- o **.zip** baixado de [Poly Haven](https://polyhaven.com/textures) ou [ambientCG](https://ambientcg.com) — os dois são
+  **CC0** (grátis para qualquer uso, inclusive servidor comercial) e têm a mesma qualidade fotoescaneada das Megascans; ou
+- as imagens soltas do conjunto (PNG, JPG, WEBP ou **TGA**).
+
+O editor reconhece os mapas pelo nome do arquivo (`_diff`/`_Color`/`_Albedo`/`_D`, `_nor_gl`/`_NormalGL`/`_N`,
+`_rough`/`_Roughness`, `_ao`, `_arm`/`_ORM`) e ignora altura, metal e prévias. Camadas sem mapa normal ganham um
+relevo gerado a partir da cor. Tudo é reduzido para no máximo 1024 px e fica guardado no projeto.
+
+**E as texturas do Unreal?** O Starter Content e os assets do Fab/Megascans com licença *UE-Only* só podem ser usados
+dentro de projetos do Unreal Engine; levar para outro sistema quebra a licença. Assets do Fab com a licença
+*Standard* podem ser usados fora do Unreal — nesse caso, no UE clique com o botão direito na textura ›
+*Asset Actions › Export* e carregue aqui (as normais do Unreal são padrão **DirectX**: o editor detecta pelo nome
+`T_..._N`, ou marque a opção na camada).
 
 ## Levando para o servidor (L2Mobius / L2J)
 
@@ -97,7 +116,7 @@ LEIA-ME.txt                         onde colocar cada arquivo
 ```
 src/main.js            aplicação: layout, menus, painéis, câmera, loop, salvar/abrir, exportar
 src/modes/             abas (mundo, terreno, objetos/npc, roupa, loja, html, exportar)
-src/world/             terreno (8 camadas), grama, céu, água, texturas procedurais
+src/world/             terreno (8 camadas PBR em texture arrays), grama, céu, água, texturas
 src/city/              editor de cidade, peças prontas
 src/cloth/             simulação de tecido, manequim, laboratório de capas
 src/play/              modo Play

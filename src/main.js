@@ -37,9 +37,9 @@ const QUALITY_KEY = 'editorjogo:qualidade';
 
 // Perfis de qualidade gráfica (preferência do navegador, não vai para o projeto).
 export const QUALITY = {
-  alta: { label: 'Alta', dpr: 2, shadows: true, shadowSize: 2048, terrainShadow: true, grassMax: 400000, triplanar: true },
-  media: { label: 'Média', dpr: 1, shadows: true, shadowSize: 1024, terrainShadow: false, grassMax: 120000, triplanar: true },
-  baixa: { label: 'Baixa', dpr: 0.75, shadows: false, shadowSize: 512, terrainShadow: false, grassMax: 30000, triplanar: false },
+  alta: { label: 'Alta', dpr: 2, shadows: true, shadowSize: 2048, terrainShadow: true, grassMax: 400000, triplanar: true, texSize: 1024 },
+  media: { label: 'Média', dpr: 1, shadows: true, shadowSize: 1024, terrainShadow: false, grassMax: 120000, triplanar: true, texSize: 1024 },
+  baixa: { label: 'Baixa', dpr: 0.75, shadows: false, shadowSize: 512, terrainShadow: false, grassMax: 30000, triplanar: false, texSize: 512 },
 };
 
 function loadQuality() {
@@ -279,7 +279,7 @@ class App {
     c.maxDistance = 3000;
 
     this.sky = new SkySystem(this, this.scene);
-    this.terrain = new Terrain(this);
+    this.terrain = new Terrain(this, { texSize: QUALITY[this.quality].texSize });
     this.grass = new Grass(this);
     this.water = new Water();
     this.scene.add(this.water.mesh);
@@ -334,6 +334,10 @@ class App {
     this.hierarchySoon = debounce(() => this.hierarchy.render(), 250);
 
     this.minimap = new Minimap(this);
+    this.events.on('layers-changed', () => {
+      this.minimap.rebuildSoon();
+      this.contentBrowser.renderGrid();
+    });
     this.coordsEl = el('span', { class: 'map-coords' }, 'X: —   Y: —   Z: —');
     const tabs = el('div', { class: 'map-tabs' });
     for (const [id, label] of [['tudo', 'Minimapa'], ['zonas', 'Zonas'], ['spawns', 'Spawns']]) {
@@ -700,6 +704,7 @@ class App {
     }
     if (this.terrain.mesh) this.terrain.mesh.castShadow = q.terrainShadow;
     this.terrain.setTriplanar(q.triplanar);
+    this.terrain.setTextureSize(q.texSize);
     this.grass.maxCount = q.grassMax;
     this.grass.applySettings(this.project.grass);
     this.scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
@@ -737,7 +742,7 @@ class App {
     const dec = Terrain.decode(pr.terrain);
     const mesh = this.terrain.create({ size: pr.terrain.size, res: pr.terrain.res, splatRes: pr.terrain.splatRes, heights: dec.heights, splat: dec.splat });
     this.scene.add(mesh);
-    for (let i = 0; i < pr.terrain.layers.length; i++) await this.terrain.setLayerTexture(i, pr.terrain.layers[i].texture);
+    for (let i = 0; i < pr.terrain.layers.length; i++) await this.terrain.setLayer(i, pr.terrain.layers[i]);
     this.terrain.setTiling(pr.terrain.layers);
     this.grass.bindTerrain(this.terrain);
     this.grass.maxCount = QUALITY[this.quality].grassMax;
