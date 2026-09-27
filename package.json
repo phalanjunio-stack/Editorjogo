@@ -1,0 +1,19 @@
+{
+  "name": "editorjogo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Editor de mundo para servidores estilo Lineage 2: terreno, céu, grama, cidades, NPCs, multisell, HTML e capas com física, com exportação para servidor L2J/L2Mobius e para Unreal Engine 5.",
+  "type": "module",
+  "scripts": {
+    "dev": "node build.mjs --serve",
+    "build": "node build.mjs",
+    "test": "node tests/run-unit.mjs",
+    "smoke": "node build.mjs && node tests/smoke.mjs"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}
