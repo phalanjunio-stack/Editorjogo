@@ -9,6 +9,12 @@ depender de nenhuma engine.
 Você monta o mundo, testa andando por ele no **modo Play** e gera os **arquivos prontos para o
 servidor** (L2Mobius / L2J).
 
+O visual é **realista, não "low poly"**: o chão, as paredes, os telhados e as pedras usam fotos
+escaneadas de verdade (PBR: cor, relevo, rugosidade e oclusão), as árvores têm tronco com casca, galhos e
+milhares de folhas balançando no vento, e na qualidade Alta há sombra de contato (oclusão de ambiente).
+
+![Pedra e árvores](docs/img/natureza.png)
+
 ![Editor](docs/img/editor.png)
 
 ## Como abrir
@@ -31,8 +37,8 @@ npm run smoke    # teste completo no navegador (precisa do Playwright)
 | Aba | O que faz |
 |---|---|
 | **Mundo** | Hora do dia (amanhecer, meio-dia, pôr do sol, noite com estrelas), direção do sol, nuvens animadas, névoa, vento, água. |
-| **Terreno** | Levantar, Abaixar, Suavizar, Nivelar, Ruído, **Erosão**, Pintar e **Caminho** (aplaina e pinta estrada). 8 camadas de textura (Grama, Terra, Rocha, Neve, Areia, Lama, Pedra, Caminho) com **PBR completo** (cor, normal, rugosidade e AO) — veja [Texturas realistas](#texturas-realistas). Gerar montanhas/vale/colinas/ilha com área plana para a cidade, auto-pintar, importar heightmap (PNG ou RAW 16 bits). **Grama e folhagem** com vento e flores (Grama Curta, Grama Alta, Flor Silvestre, Campo Florido, Floresta, Capim Seco). |
-| **Objetos** | Escolha a peça no **Navegador de Conteúdo** (miniaturas 3D) e clique no chão. Gizmo W/E/R, grade/ímã, **muralha automática** com torres, **espalhar** árvores e pedras com pincel, **importar suas malhas** GLB/FBX/OBJ. Bandeiras com tecido de verdade balançando no vento. |
+| **Terreno** | Levantar, Abaixar, Suavizar, Nivelar, Ruído, **Erosão**, Pintar e **Caminho** (aplaina e pinta estrada). 8 camadas de textura (Grama, Terra, Rocha, Neve, Areia, Lama, Pedra, Caminho) já com **fotos PBR** (cor, normal, rugosidade e AO), misturadas por altura (as pedras "saltam" da grama) — e dá para trocar por qualquer outra, veja [Texturas realistas](#texturas-realistas). Gerar montanhas/vale/colinas/ilha com área plana para a cidade, auto-pintar, importar heightmap (PNG ou RAW 16 bits). **Grama e folhagem** com vento e flores (Grama Curta, Grama Alta, Flor Silvestre, Campo Florido, Floresta, Capim Seco). |
+| **Objetos** | Escolha a peça no **Navegador de Conteúdo** (miniaturas 3D) e clique no chão. Casas em enxaimel com reboco, madeira e telha de barro, torres de pedra com telhado de ardósia, templo de mármore, **árvores realistas** (carvalho, freixo, pinheiro, arbustos — cada cópia varia) e pedras lascadas. Gizmo W/E/R, grade/ímã, **muralha automática** com torres, **espalhar** árvores e pedras com pincel, **importar suas malhas** GLB/FBX/OBJ. Bandeiras com tecido de verdade balançando no vento. |
 | **NPC** | Coloca NPCs (viram spawns do servidor) com **Posição e Heading em coordenadas L2**, Level, HP, MP, raça, **IA** (agressivo, raio de visão), respawn, quantidade/raio, **Drop List**, página HTML e loja. Desenha **zonas** (paz, cidade, arena PvP...). |
 | **Roupa** | **Física de tecido**: capa (presa nos ombros), manto/saia (na cintura) e bandeira. Rigidez, dobra, peso, vento, colisão com o corpo, formato da ponta (reta, V, pontas, rasgada), cores e **emblema**. Testa num boneco andando/correndo — ou no seu personagem GLB/FBX (ex.: Mixamo) escolhendo o osso. |
 | **Loja** | Multisell com prévia igual à janela do jogo, IDs de item com nome, colar lista "id;quantidade;preço", importar XML existente, importar a lista de itens do seu servidor. |
@@ -47,7 +53,9 @@ grama, água, objetos, NPCs e zonas) e as **Propriedades** do que estiver seleci
 ## Texturas realistas
 
 Cada camada do terreno usa um conjunto PBR: **cor**, **normal** (relevo), **rugosidade** e **oclusão (AO)**.
-Em **Terreno › Propriedades** clique em *Carregar textura PBR* e escolha:
+As 8 camadas já vêm com fotos do [Poly Haven](https://polyhaven.com) (CC0, domínio público — lista em
+[assets/textures/CREDITOS.md](assets/textures/CREDITOS.md)). Para trocar, em **Terreno › Propriedades**
+clique em *Carregar textura PBR* e escolha:
 
 - o **.zip** baixado de [Poly Haven](https://polyhaven.com/textures) ou [ambientCG](https://ambientcg.com) — os dois são
   **CC0** (grátis para qualquer uso, inclusive servidor comercial) e têm a mesma qualidade fotoescaneada das Megascans; ou
@@ -106,8 +114,8 @@ LEIA-ME.txt                         onde colocar cada arquivo
   construções, grama) fica no projeto do EditorJogo e no modo Play. Os arquivos de servidor (spawns,
   lojas, HTML, zonas) funcionam com qualquer cliente.
 - **Não gera geodata.** Sem geodata o servidor aceita o Z enviado pelo cliente; gere a geodata do mapa novo depois.
-- A qualidade visual depende dos modelos e texturas: as peças prontas são simples (feitas por código).
-  Importe as suas (GLB/FBX/OBJ e fotos de textura) para chegar no visual das engines grandes.
+- As peças prontas têm forma simples (feitas por código) com acabamento fotográfico. Para prédios
+  únicos (castelo, catedral), importe os seus modelos GLB/FBX/OBJ.
 - Tudo fica no arquivo `.json` do projeto (**Salvar**). O navegador guarda um salvamento automático
   por minuto como segurança, mas não confie só nele.
 
@@ -116,8 +124,10 @@ LEIA-ME.txt                         onde colocar cada arquivo
 ```
 src/main.js            aplicação: layout, menus, painéis, câmera, loop, salvar/abrir, exportar
 src/modes/             abas (mundo, terreno, objetos/npc, roupa, loja, html, exportar)
-src/world/             terreno (8 camadas PBR em texture arrays), grama, céu, água, texturas
-src/city/              editor de cidade, peças prontas
+src/world/             terreno (8 camadas PBR em texture arrays), grama, céu, água, pós-processamento
+src/city/              editor de cidade, peças prontas (materiais PBR, pedras)
+src/nature/            árvores realistas (ez-tree) com vento
+src/assets.js          texturas embutidas (assets/textures: fotos em WebP 512 px)
 src/cloth/             simulação de tecido, manequim, laboratório de capas
 src/play/              modo Play
 src/l2/                itens, multisell, HTML (prévia L2), exportação do servidor
@@ -125,4 +135,8 @@ src/ui/                componentes, ícones, hierarquia, navegador de conteúdo,
 tests/                 testes de unidade e teste no navegador
 ```
 
-Feito com [three.js](https://threejs.org). Tudo roda no seu computador; nenhum arquivo é enviado para lugar nenhum.
+Feito com [three.js](https://threejs.org) e [ez-tree](https://github.com/dgreenheck/ez-tree) (ambos MIT).
+Texturas: Poly Haven (CC0) e ez-tree. Tudo roda no seu computador; nenhum arquivo é enviado para lugar nenhum.
+
+**Qualidade gráfica** (menu Render): *Alta* liga sombra de contato, sombras 2048 e densidade de pixels 2×;
+*Média* tem antisserrilhado e sombras; *Baixa* é para notebook fraco (sem sombras nem pós-processamento).

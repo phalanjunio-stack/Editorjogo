@@ -166,12 +166,13 @@ export class CityEditor {
 
   _disposeNode(node) {
     if (!node) return;
-    // Peças prontas geram geometria própria; malhas importadas compartilham a do modelo.
+    // Peças prontas geram geometria própria (menos árvores e pedras, que reaproveitam variações);
+    // malhas importadas compartilham a do modelo.
     const shared = node.userData.sharedGeometry;
     const ownMaterials = node.userData.kind === 'npc' || node.userData.kind === 'zone';
     node.traverse((o) => {
       if (o.isSprite) { o.material.map?.dispose(); o.material.dispose(); return; }
-      if ((o.isMesh || o.isLine || o.isPoints) && (!shared || o.userData.ownGeometry)) o.geometry?.dispose();
+      if ((o.isMesh || o.isLine || o.isPoints) && (!shared || o.userData.ownGeometry) && !o.geometry?.userData.shared) o.geometry?.dispose();
       if (ownMaterials && o.material && !o.isSprite) o.material.dispose();
     });
   }

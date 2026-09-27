@@ -102,7 +102,7 @@ export class SkySystem {
     if (day > 0.001) {
       this.lightDir.copy(this.sunDir);
       this.sun.color.copy(C('#ffb46a')).lerp(C('#fff3e2'), smoothstep(0.02, 0.45, e));
-      this.sun.intensity = 3.2 * day;
+      this.sun.intensity = 3.5 * day;
     } else {
       this.lightDir.copy(this.sunDir).negate();
       if (this.lightDir.y < 0.2) this.lightDir.y = 0.2;
@@ -112,7 +112,8 @@ export class SkySystem {
     }
     this.hemi.color.copy(C('#1b2640')).lerp(C('#bcd6f2'), day);
     this.hemi.groundColor.copy(C('#141210')).lerp(C('#5d4c36'), day);
-    this.hemi.intensity = 0.5 + 0.7 * day;
+    // luz ambiente mais contida: sombra com contraste de verdade, sem o "véu" azulado
+    this.hemi.intensity = 0.3 + 0.5 * day;
 
     const fogDay = C('#bfd3e6').lerp(C('#e7b58a'), golden * 0.8);
     const fogColor = C('#0a0f1c').lerp(fogDay, day);
@@ -125,8 +126,8 @@ export class SkySystem {
     if (r) r.toneMappingExposure = p.exposure * (1 + (1 - day) * 0.6);
 
     // Cores usadas pela grama (shader próprio)
-    this.grassSun.copy(this.sun.color).multiplyScalar(this.sun.intensity * 0.28);
-    this.grassAmbient.copy(this.hemi.color).multiplyScalar(this.hemi.intensity * 0.35);
+    this.grassSun.copy(this.sun.color).multiplyScalar(this.sun.intensity * 0.256);
+    this.grassAmbient.copy(this.hemi.color).multiplyScalar(this.hemi.intensity * 0.52);
 
     const wd = p.windDir * DEG;
     this.windDir2.set(Math.cos(wd), Math.sin(wd));
@@ -145,7 +146,8 @@ export class SkySystem {
     this.envRT?.dispose();
     this.envRT = rt;
     this.scene.environment = rt.texture;
-    this.scene.environmentIntensity = 0.35 + 0.65 * this.day;
+    // o céu (PMREM) é muito claro: pouco dele já dá o reflexo e a luz de preenchimento certos
+    this.scene.environmentIntensity = 0.08 + 0.22 * this.day;
   }
 
   update(dt, focus, cloudSpeed = 1) {

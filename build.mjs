@@ -3,6 +3,7 @@
 //   node build.mjs --serve  -> build + recompila ao salvar + servidor em http://localhost:8080
 import * as esbuild from 'esbuild';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
 
 const serve = process.argv.includes('--serve');
 const OUT = 'dist/EditorJogo.html';
@@ -26,6 +27,16 @@ const inlineHtml = {
   },
 };
 
+// Gerador de árvores (ez-tree): usa o código-fonte do pacote, mas sem as texturas originais
+// (quase 3 MB); as árvores usam as versões menores de assets/textures/tree.
+const ezTree = {
+  name: 'ez-tree',
+  setup(build) {
+    build.onResolve({ filter: /^ez-tree$/ }, () => ({ path: path.resolve('node_modules/@dgreenheck/ez-tree/src/lib/index.js') }));
+    build.onResolve({ filter: /^\.\/textures(\.js)?$/ }, (a) => (a.importer.includes(`${path.sep}ez-tree${path.sep}`) ? { path: path.resolve('src/nature/ezTreeTextures.js') } : undefined));
+  },
+};
+
 const options = {
   entryPoints: ['src/main.js'],
   bundle: true,
@@ -35,11 +46,11 @@ const options = {
   sourcemap: false,
   write: false,
   outdir: 'dist/tmp',
-  loader: { '.py': 'text' },
+  loader: { '.py': 'text', '.webp': 'dataurl' },
   external: ['node:zlib'],
   legalComments: 'none',
   logLevel: 'warning',
-  plugins: [inlineHtml],
+  plugins: [ezTree, inlineHtml],
 };
 
 if (serve) {

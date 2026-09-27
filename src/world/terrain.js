@@ -3,10 +3,10 @@
 import * as THREE from 'three';
 import { Noise2D } from '../core/noise.js';
 import { clamp, lerp, smoothstep, float32ToBase64, base64ToFloat32, bytesToBase64, base64ToBytes } from '../core/util.js';
-import { LAYER_GENERATORS } from './textures.js';
 import { LayerTextures } from './layerTextures.js';
 import { loadDataUrl } from './pbrImport.js';
 import { DEFAULT_LAYERS } from '../core/state.js';
+import { TERRAIN_SETS } from '../assets.js';
 
 export const LAYERS = 8;
 export const LAYER_UI_COLORS = ['#6dbb4a', '#a57a4a', '#9a9a9a', '#e8f0ff', '#d9c08a', '#5e4a34', '#8f8a80', '#b89a70'];
@@ -27,6 +27,7 @@ uniform sampler2DArray uAlbedoArr;
 uniform sampler2DArray uNormalArr;
 uniform float uTiling[8];
 uniform float uNormalStr[8];
+uniform float uLayerLum[8];
 uniform vec2 uBrushPos;
 uniform float uBrushRadius;
 uniform float uBrushOn;
@@ -46,6 +47,9 @@ float tNoise(vec2 p) {
 
 // Mistura as 8 camadas. Só amostra as camadas presentes no ponto (textureGrad mantém o mipmap
 // correto mesmo dentro do "if"). Normal triplanar com "whiteout blend".
+// Mistura por altura: onde duas camadas se encontram, a parte "alta" da foto (pedras, torrões)
+// aparece primeiro e a baixa (vãos, lama) some, como no chão de verdade. De longe mistura uma
+// segunda escala da mesma foto para esconder a repetição.
 const FRAG_BLEND = /* glsl */ `
   vec4 swA = texture2D(uSplatA, vTUv);
   vec4 swB = texture2D(uSplatB, vTUv);
@@ -63,6 +67,8 @@ const FRAG_BLEND = /* glsl */ `
   vec3 tNrm = vec3(0.0);
   float tAO = 0.0;
   float tRough = 0.0;
+  float tWs = 0.0;
+  float tFar = smoothstep(25.0, 160.0, distance(vTWorld, cameraPosition));
   for (int i = 0; i < 8; i++) {
     float wi = tW[i] / tSum;
     if (wi < 0.004) continue;
@@ -77,6 +83,12 @@ const FRAG_BLEND = /* glsl */ `
     vec4 nY = textureGrad(uNormalArr, vec3(tP.xz * s, L), tDx.xz * s, tDy.xz * s);
     vec4 nZ = textureGrad(uNormalArr, vec3(tP.xy * s, L), tDx.xy * s, tDy.xy * s);
     vec4 a = aX * bw.x + aY * bw.y + aZ * bw.z;
+    float s2 = s * 0.29;
+    vec4 fX = textureGrad(uAlbedoArr, vec3(tP.zy * s2 + 0.37, L), tDx.zy * s2, tDy.zy * s2);
+    vec4 fY = textureGrad(uAlbedoArr, vec3(tP.xz * s2 + 0.37, L), tDx.xz * s2, tDy.xz * s2);
+    vec4 fZ = textureGrad(uAlbedoArr, vec3(tP.xy * s2 + 0.37, L), tDx.xy * s2, tDy.xy * s2);
+    vec4 aF = fX * bw.x + fY * bw.y + fZ * bw.z;
+    a.rgb = mix(a.rgb, (a.rgb + aF.rgb) * 0.5, mix(0.3, 0.7, tFar));
     vec3 tnX = nX.xyz * 2.0 - 1.0; tnX.xy *= ns; tnX.z *= tAxis.x;
     vec3 tnY = nY.xyz * 2.0 - 1.0; tnY.xy *= ns; tnY.z *= tAxis.y;
     vec3 tnZ = nZ.xyz * 2.0 - 1.0; tnZ.xy *= ns; tnZ.z *= tAxis.z;
@@ -93,11 +105,16 @@ const FRAG_BLEND = /* glsl */ `
     vec3 nw = normalize(tnY.xzy);
     float rg = nn.a;
 #endif
-    tAlb += a.rgb * wi;
-    tAO += a.a * wi;
-    tNrm += nw * wi;
-    tRough += rg * wi;
+    float hn = dot(a.rgb, vec3(0.299, 0.587, 0.114)) * a.a / uLayerLum[i];
+    float hw = wi * pow(clamp(hn, 0.05, 3.0), 3.0);
+    tAlb += a.rgb * hw;
+    tAO += a.a * hw;
+    tNrm += nw * hw;
+    tRough += rg * hw;
+    tWs += hw;
   }
+  tWs = max(tWs, 1e-5);
+  tAlb /= tWs; tAO /= tWs; tNrm /= tWs; tRough /= tWs;
   float macro = 0.86 + 0.24 * tNoise(vTWorld.xz * 0.012) + 0.08 * tNoise(vTWorld.xz * 0.07);
   diffuseColor.rgb *= tAlb * mix(1.0, tAO, 0.85) * macro;
   float wet = 1.0 - smoothstep(uWaterLevel, uWaterLevel + 0.6, vTWorld.y);
@@ -140,7 +157,6 @@ const FRAG_OVERLAY = /* glsl */ `
 export class Terrain {
   constructor(app, { texSize = 1024 } = {}) {
     this.app = app;
-    this.procedural = LAYER_GENERATORS.map((g) => g().image);
     this.lt = new LayerTextures(texSize, LAYERS);
     this._sig = new Array(LAYERS).fill('');
     this.uniforms = {
@@ -150,6 +166,7 @@ export class Terrain {
       uNormalArr: { value: this.lt.normal },
       uTiling: { value: new Float32Array(LAYERS).fill(0.25) },
       uNormalStr: { value: new Float32Array(LAYERS).fill(1) },
+      uLayerLum: { value: new Float32Array(LAYERS).fill(0.2) },
       uViewMode: { value: 0 },
       uBrushPos: { value: new THREE.Vector2() },
       uBrushRadius: { value: 10 },
@@ -159,10 +176,13 @@ export class Terrain {
       uGridSize: { value: 4 },
       uWaterLevel: { value: -1000 },
     };
+    // Enquanto as fotos padrão carregam, cada camada fica com uma cor lisa.
     for (let i = 0; i < LAYERS; i++) {
-      this.lt.setLayer(i, { color: this.procedural[i], roughness: DEFAULT_LAYERS[i].roughness });
+      this.lt.fillFlat(i, LAYER_UI_COLORS[i]);
       this._sig[i] = this._signature(DEFAULT_LAYERS[i]);
     }
+    this.defaults = [];
+    this._defaultsReady = this._loadDefaults();
     this.setTiling(DEFAULT_LAYERS);
     this.material = this._makeMaterial();
     this.mesh = null;
@@ -704,7 +724,37 @@ export class Terrain {
   }
 
   // Aplica as imagens da camada (cor, normal, rugosidade, AO). Sem cor, usa a textura padrão.
+  // Fotos padrão (embutidas no editor) de cada camada.
+  async _loadDefaults() {
+    const load = (url) => loadDataUrl(url).catch(() => null);
+    this.defaults = await Promise.all(TERRAIN_SETS.map(async (t) => {
+      const [color, normal, arm] = await Promise.all([load(t.color), load(t.normal), load(t.arm)]);
+      return { color, normal, arm };
+    }));
+    for (let i = 0; i < LAYERS; i++) this._write(i, DEFAULT_LAYERS[i], {});
+    this.app.events?.emit('layers-changed');
+  }
+
+  // Mapas que faltarem na camada vêm da foto padrão (se a cor também for padrão).
+  _write(i, layer, own) {
+    const def = this.defaults[i] || {};
+    const custom = !!own.color;
+    const color = own.color || def.color;
+    if (!color) return;
+    this.lt.setLayer(i, {
+      color,
+      normal: own.normal || (custom ? null : def.normal),
+      rough: own.rough,
+      ao: own.ao,
+      arm: custom ? null : def.arm,
+      normalDX: own.normal ? !!layer.normalDX : false,
+      roughness: layer.roughness ?? 0.9,
+    });
+    this.uniforms.uLayerLum.value[i] = Math.max(0.02, this.lt.lum[i]);
+  }
+
   async setLayer(i, layer) {
+    await this._defaultsReady;
     const sig = this._signature(layer);
     if (sig === this._sig[i]) return;
     const load = async (url) => {
@@ -712,7 +762,7 @@ export class Terrain {
       try { return await loadDataUrl(url); } catch { return null; }
     };
     const [color, normal, rough, ao] = await Promise.all([load(layer.texture), load(layer.normal), load(layer.rough), load(layer.ao)]);
-    this.lt.setLayer(i, { color: color || this.procedural[i], normal, rough, ao, normalDX: !!layer.normalDX, roughness: layer.roughness ?? 0.9 });
+    this._write(i, layer, { color, normal, rough, ao });
     this._sig[i] = sig;
     this.app.events?.emit('layers-changed');
   }

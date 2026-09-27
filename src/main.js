@@ -27,6 +27,8 @@ import { showHelp, showAbout } from './modes/help.js';
 import { EditorLog } from './ui/log.js';
 import { Minimap } from './ui/minimap.js';
 import { ThumbRenderer } from './ui/thumbs.js';
+import { PostFX } from './world/post.js';
+import { WIND } from './nature/trees.js';
 import { ContentBrowser } from './ui/contentBrowser.js';
 import { Hierarchy } from './ui/hierarchy.js';
 import { PlayMode } from './play/play.js';
@@ -37,9 +39,9 @@ const QUALITY_KEY = 'editorjogo:qualidade';
 
 // Perfis de qualidade gráfica (preferência do navegador, não vai para o projeto).
 export const QUALITY = {
-  alta: { label: 'Alta', dpr: 2, shadows: true, shadowSize: 2048, terrainShadow: true, grassMax: 400000, triplanar: true, texSize: 1024 },
-  media: { label: 'Média', dpr: 1, shadows: true, shadowSize: 1024, terrainShadow: false, grassMax: 120000, triplanar: true, texSize: 1024 },
-  baixa: { label: 'Baixa', dpr: 0.75, shadows: false, shadowSize: 512, terrainShadow: false, grassMax: 30000, triplanar: false, texSize: 512 },
+  alta: { label: 'Alta', dpr: 2, shadows: true, shadowSize: 2048, terrainShadow: true, grassMax: 400000, triplanar: true, texSize: 1024, post: true, ao: true },
+  media: { label: 'Média', dpr: 1, shadows: true, shadowSize: 1024, terrainShadow: false, grassMax: 120000, triplanar: true, texSize: 1024, post: true, ao: false },
+  baixa: { label: 'Baixa', dpr: 0.75, shadows: false, shadowSize: 512, terrainShadow: false, grassMax: 30000, triplanar: false, texSize: 512, post: false, ao: false },
 };
 
 function loadQuality() {
@@ -358,6 +360,7 @@ class App {
   _resize() {
     const w = Math.max(1, this.viewport.clientWidth), h = Math.max(1, this.viewport.clientHeight);
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     this.capeLab.camera.aspect = w / h;
@@ -707,6 +710,9 @@ class App {
     this.terrain.setTextureSize(q.texSize);
     this.grass.maxCount = q.grassMax;
     this.grass.applySettings(this.project.grass);
+    // pós-processamento: recriado quando muda a qualidade (o MSAA depende da densidade de pixels)
+    this.post?.dispose();
+    this.post = q.post ? new PostFX(this.renderer, this.scene, this.camera, { ao: q.ao }) : null;
     this.scene.traverse((o) => { if (o.material && !Array.isArray(o.material)) o.material.needsUpdate = true; });
     this.applyShow();
     this._resize();
@@ -929,9 +935,13 @@ class App {
         }
         this.sky.update(dt, this.playing ? this.play.char.root.position : this.controls.target, this.project.sky.cloudSpeed);
         this.grass.update(this.time, this.sky);
+        WIND.uTime.value = this.time;
+        WIND.uWindDir.value.copy(this.sky.windDir2);
+        WIND.uWindStrength.value = this.sky.windStrength;
         this.water.update(this.time);
         this.city.update(dt, this.time);
-        this.renderer.render(this.scene, this.camera);
+        if (this.post) this.post.render(dt);
+        else this.renderer.render(this.scene, this.camera);
       } else if (view === 'cloth') {
         this.capeLab.ensureEnvironment();
         this.capeLab.update(dt);

@@ -241,7 +241,7 @@ export const terrenoMode = {
     big.style.backgroundImage = `url("${textureThumb(app.terrain.layerTextures[i])}")`;
     const mapsIn = ['texture', 'normal', 'rough', 'ao'].filter((k) => l[k]).length;
     lay.append(el('div', { class: 'prop-head' }, big, el('div', {}, el('b', {}, l.name),
-      el('div', { class: 'hint' }, `Camada ${i + 1} de 8 • ${l.texture ? `${mapsIn} mapa${mapsIn > 1 ? 's' : ''} PBR` : 'textura padrão'}`))));
+      el('div', { class: 'hint' }, `Camada ${i + 1} de 8 • ${l.texture ? `${mapsIn} mapa${mapsIn > 1 ? 's' : ''} PBR` : 'foto padrão (CC0)'}`))));
     text(lay, 'Nome', l, 'name', { onChange: () => { app.markDirty(); app.refreshLeft(); } });
     const apply = async (msg) => {
       await app.terrain.setLayer(i, l);
@@ -266,7 +266,7 @@ export const terrenoMode = {
     for (const [key, label] of [['texture', 'Cor'], ['normal', 'Normal'], ['rough', 'Rugosidade'], ['ao', 'Oclusão (AO)']]) {
       const img = el('div', { class: 'map-img' });
       if (l[key]) img.style.backgroundImage = `url("${l[key]}")`;
-      else img.append(el('span', {}, key === 'texture' ? 'padrão' : key === 'normal' ? 'da cor' : '—'));
+      else img.append(el('span', {}, !l.texture ? 'padrão' : key === 'normal' ? 'da cor' : '—'));
       const load = el('button', { class: 'ibtn tiny', type: 'button', title: `Carregar ${label}` }, ico('upload', 12));
       load.addEventListener('click', async () => {
         const [f] = await pickFiles('.png,.jpg,.jpeg,.webp,.tga,.bmp');
@@ -286,8 +286,8 @@ export const terrenoMode = {
     lay.append(slots);
     slider(lay, 'Repetição', l, 'tiling', { min: 0.02, max: 1, step: 0.01, onChange: () => app.terrain.setTiling(p.terrain.layers), title: 'Menor = textura maior no chão' });
     slider(lay, 'Força do relevo', l, 'normalStrength', { min: 0, max: 3, step: 0.05, onChange: () => { app.terrain.setTiling(p.terrain.layers); app.markDirty(); } });
-    if (!l.rough) slider(lay, 'Rugosidade', l, 'roughness', { min: 0.05, max: 1, step: 0.01, onCommit: () => apply(), title: 'Baixo = brilhante/molhado, alto = fosco' });
-    checkbox(lay, 'Normal no padrão DirectX (Unreal)', l, 'normalDX', { onChange: () => apply(), title: 'Marque se o relevo parecer "afundado" onde deveria saltar' });
+    if (l.texture && !l.rough) slider(lay, 'Rugosidade', l, 'roughness', { min: 0.05, max: 1, step: 0.01, onCommit: () => apply(), title: 'Baixo = brilhante/molhado, alto = fosco' });
+    if (l.normal) checkbox(lay, 'Normal no padrão DirectX (Unreal)', l, 'normalDX', { onChange: () => apply(), title: 'Marque se o relevo parecer "afundado" onde deveria saltar' });
     button(lay, 'Voltar para a textura padrão', async () => {
       Object.assign(l, { texture: null, normal: null, rough: null, ao: null, normalDX: false });
       await apply(`${l.name}: textura padrão.`);

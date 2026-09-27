@@ -91,6 +91,6 @@ export const mundoMode = {
 
     const q = section(root, 'Qualidade gráfica', { icon: 'sliders', open: false });
     buttonRow(q, ...['alta', 'media', 'baixa'].map((k) => button(null, { alta: 'Alta', media: 'Média', baixa: 'Baixa' }[k], () => app.setQuality(k), { variant: app.quality === k ? 'primary' : '' })));
-    hint(q, 'Use Baixa em PCs fracos ou notebooks: menos grama, sem sombras.');
+    hint(q, 'Alta: sombra de contato e imagem mais nítida (placa de vídeo boa). Média: antisserrilhado e sombras. Baixa: PCs fracos e notebooks (menos grama, sem sombras).');
   },
 };

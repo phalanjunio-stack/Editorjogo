@@ -4,6 +4,12 @@
 //   normal: RGB = normal (+verde = +v), A = rugosidade
 import * as THREE from 'three';
 
+// sRGB (byte) -> linear, para o brilho médio usado na mistura por altura
+const LIN = Float32Array.from({ length: 256 }, (_, v) => {
+  const c = v / 255;
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+});
+
 function makeArray(data, size, count, srgb) {
   const t = new THREE.DataArrayTexture(data, size, size, count);
   t.format = THREE.RGBAFormat;
@@ -43,6 +49,8 @@ export class LayerTextures {
       return c;
     });
     this.avg = Array.from({ length: count }, () => [128, 128, 128]);
+    this.lum = new Array(count).fill(0.2);
+    this.flat = new Array(count).fill('#808080');
     this._alloc(size);
   }
 
@@ -61,14 +69,35 @@ export class LayerTextures {
   setSize(size) {
     if (size === this.size) return false;
     this._alloc(size);
-    for (let i = 0; i < this.count; i++) if (this.sources[i]) this._write(i, true);
+    for (let i = 0; i < this.count; i++) {
+      if (this.sources[i]) this._write(i, true);
+      else this.fillFlat(i, this.flat[i]);
+    }
     return true;
+  }
+
+  // Cor lisa (enquanto a foto da camada não carrega).
+  fillFlat(i, hex) {
+    this.flat[i] = hex;
+    const c = new THREE.Color(hex);
+    const r = Math.round(c.r * 255), g = Math.round(c.g * 255), b = Math.round(c.b * 255);
+    const S = this.size, off = i * S * S * 4;
+    const px = (a, b2, c2, d) => ((a | (b2 << 8) | (c2 << 16) | (d << 24)) >>> 0); // RGBA em little-endian
+    new Uint32Array(this.albedoData.buffer, off, S * S).fill(px(r, g, b, 255));
+    new Uint32Array(this.normalData.buffer, off, S * S).fill(px(128, 128, 255, 230));
+    this.avg[i] = [r, g, b];
+    this.lum[i] = LIN[r] * 0.299 + LIN[g] * 0.587 + LIN[b] * 0.114;
+    const pv = this.previews[i].getContext('2d');
+    pv.fillStyle = hex;
+    pv.fillRect(0, 0, 128, 128);
+    for (const t of [this.albedo, this.normal]) t.needsUpdate = true;
   }
 
   /**
    * @param {number} i
    * @param {{color: CanvasImageSource, normal?: CanvasImageSource|null, rough?: CanvasImageSource|null,
-   *          ao?: CanvasImageSource|null, normalDX?: boolean, roughness?: number}} src
+   *          ao?: CanvasImageSource|null, arm?: CanvasImageSource|null, normalDX?: boolean, roughness?: number}} src
+   *   arm = mapa combinado (R oclusão, G rugosidade), usado onde não houver ao/rough próprios
    */
   setLayer(i, src) {
     this.sources[i] = src;
@@ -80,19 +109,25 @@ export class LayerTextures {
     const A = this.albedoData, N = this.normalData;
     const off = i * S * S * 4;
     const col = pixels(src.color, S).slice();
-    const ao = src.ao ? pixels(src.ao, S).slice() : null;
-    let sr = 0, sg = 0, sb = 0;
+    const arm = src.arm && (!src.ao || !src.rough) ? pixels(src.arm, S).slice() : null;
+    const ao = src.ao ? pixels(src.ao, S).slice() : arm;
+    let sr = 0, sg = 0, sb = 0, sl = 0;
     for (let k = 0; k < S * S * 4; k += 4) {
       A[off + k] = col[k];
       A[off + k + 1] = col[k + 1];
       A[off + k + 2] = col[k + 2];
       A[off + k + 3] = ao ? ao[k] : 255;
       sr += col[k]; sg += col[k + 1]; sb += col[k + 2];
+      sl += (LIN[col[k]] * 0.299 + LIN[col[k + 1]] * 0.587 + LIN[col[k + 2]] * 0.114) * (ao ? ao[k] / 255 : 1);
     }
     const px = S * S;
     this.avg[i] = [sr / px, sg / px, sb / px];
+    this.lum[i] = sl / px;
 
+    // rugosidade: mapa próprio (canal R) ou o G do mapa ARM
     const rough = src.rough ? pixels(src.rough, S).slice() : null;
+    const rc = rough ? 0 : 1;
+    const roughSrc = rough || (src.arm ? arm : null);
     const baseRough = Math.round((src.roughness ?? 0.9) * 255);
     if (src.normal) {
       const nrm = pixels(src.normal, S);
@@ -102,10 +137,10 @@ export class LayerTextures {
         N[off + k] = nrm[k];
         N[off + k + 1] = src.normalDX ? nrm[k + 1] : 255 - nrm[k + 1];
         N[off + k + 2] = nrm[k + 2];
-        N[off + k + 3] = rough ? rough[k] : baseRough;
+        N[off + k + 3] = roughSrc ? roughSrc[k + rc] : baseRough;
       }
     } else {
-      this._deriveNormal(col, S, off, rough, baseRough);
+      this._deriveNormal(col, S, off, roughSrc, rc, baseRough);
     }
 
     const pv = this.previews[i].getContext('2d');
@@ -119,7 +154,7 @@ export class LayerTextures {
   }
 
   // Sem mapa normal: cria um relevo a partir da claridade da cor (pedras claras "saltam").
-  _deriveNormal(col, S, off, rough, baseRough) {
+  _deriveNormal(col, S, off, rough, rc, baseRough) {
     const N = this.normalData;
     const h = new Float32Array(S * S);
     for (let p = 0, k = 0; p < S * S; p++, k += 4) h[p] = (col[k] * 0.299 + col[k + 1] * 0.587 + col[k + 2] * 0.114) / 255;
@@ -145,7 +180,7 @@ export class LayerTextures {
         N[q] = (nx * 0.5 + 0.5) * 255;
         N[q + 1] = (ny * 0.5 + 0.5) * 255;
         N[q + 2] = (nz * 0.5 + 0.5) * 255;
-        N[q + 3] = rough ? rough[(yc + x) * 4] : baseRough;
+        N[q + 3] = rough ? rough[(yc + x) * 4 + rc] : baseRough;
       }
     }
   }

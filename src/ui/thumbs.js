@@ -1,6 +1,7 @@
 // Miniaturas 3D das peças para o Navegador de Conteúdo (renderizadas uma vez e guardadas).
 import * as THREE from 'three';
 import { buildPrefab } from '../city/prefabs.js';
+import { texturesPending } from '../core/textureLoader.js';
 
 const SIZE = 128;
 
@@ -48,18 +49,23 @@ export class ThumbRenderer {
 
   // Processa algumas miniaturas por quadro para não travar a interface.
   pump(max = 2) {
+    // espera as texturas carregarem para a foto não sair preta
+    if (texturesPending()) return;
     const r = this.app.renderer;
     for (let n = 0; n < max && this.queue.length; n++) {
-      const { key, build } = this.queue.shift();
+      const job = this.queue[0];
       let url = '';
       try {
-        url = this._render(r, build());
+        job.obj ??= job.build();
+        if (texturesPending()) return; // a peça acabou de pedir texturas: fotografa depois
+        url = this._render(r, job.obj);
       } catch (err) {
-        console.warn('miniatura', key, err);
+        console.warn('miniatura', job.key, err);
       }
-      this.cache.set(key, url);
-      for (const cb of this.listeners.get(key) || []) cb(url);
-      this.listeners.delete(key);
+      this.queue.shift();
+      this.cache.set(job.key, url);
+      for (const cb of this.listeners.get(job.key) || []) cb(url);
+      this.listeners.delete(job.key);
     }
   }
 
@@ -94,7 +100,7 @@ export class ThumbRenderer {
     renderer.toneMappingExposure = prevExposure;
     renderer.shadowMap.enabled = prevShadow;
     this.scene.remove(obj);
-    obj.traverse((o) => { if (o.isMesh && !obj.userData.keepGeometry && obj.userData.prefab) o.geometry?.dispose(); });
+    obj.traverse((o) => { if (o.isMesh && !obj.userData.keepGeometry && obj.userData.prefab && !o.geometry?.userData.shared) o.geometry?.dispose(); });
 
     const c = document.createElement('canvas');
     c.width = c.height = SIZE;

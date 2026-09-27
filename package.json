@@ -11,6 +11,7 @@
     "smoke": "node build.mjs && node tests/smoke.mjs"
   },
   "dependencies": {
+    "@dgreenheck/ez-tree": "1.1.0",
     "three": "^0.186.1"
   },
   "devDependencies": {

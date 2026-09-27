@@ -13,17 +13,18 @@ export const DEFAULT_BYPASS = {
 
 export const LAYER_COUNT = 8;
 // Cada camada: cor (texture), normal, rugosidade (rough) e oclusão (ao) como imagens opcionais.
-// Sem imagem de cor usa a textura procedural; sem normal, o relevo é gerado a partir da cor.
+// Sem imagem de cor usa a foto padrão da camada; com cor própria e sem normal, o relevo é gerado a partir da cor.
 const layer = (name, tiling, roughness) => ({ name, tiling, roughness, normalStrength: 1, normalDX: false, texture: null, normal: null, rough: null, ao: null });
+// Repetição = 1 / tamanho real da foto em metros (a grama padrão cobre 2,5 m, a rocha 5 m...).
 export const DEFAULT_LAYERS = [
-  layer('Grama', 0.25, 0.95),
-  layer('Terra', 0.25, 0.95),
-  layer('Rocha', 0.12, 0.85),
-  layer('Neve', 0.2, 0.55),
-  layer('Areia', 0.2, 0.95),
-  layer('Lama', 0.2, 0.6),
-  layer('Pedra', 0.3, 0.8),
-  layer('Caminho', 0.3, 0.95),
+  layer('Grama', 0.4, 0.95),
+  layer('Terra', 0.4, 0.95),
+  layer('Rocha', 0.2, 0.85),
+  layer('Neve', 0.3, 0.55),
+  layer('Areia', 0.35, 0.95),
+  layer('Lama', 0.35, 0.6),
+  layer('Pedra', 0.45, 0.8),
+  layer('Caminho', 0.4, 0.95),
 ];
 
 // Tipos de folhagem (presets do sistema de grama).
