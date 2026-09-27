@@ -35,6 +35,7 @@ import { WIND } from './nature/trees.js';
 import { ContentBrowser } from './ui/contentBrowser.js';
 import { Hierarchy } from './ui/hierarchy.js';
 import { PlayMode } from './play/play.js';
+import { Assistant } from './ai/assistant.js';
 
 export const APP_NAME = 'EDITORJOGO';
 const AUTOSAVE_KEY = 'editorjogo:autosave';
@@ -346,6 +347,10 @@ class App {
     this.hierarchySoon = debounce(() => this.hierarchy.render(), 250);
 
     this.minimap = new Minimap(this);
+    // assistente Claude: botão na barra de cima e painel por cima da coluna da direita
+    this.assistant = new Assistant(this);
+    this.playBtn.before(this.assistant.btn);
+    this.workspace.append(this.assistant.panel);
     const charsChanged = debounce(() => { this.city.refreshCharacters(); this.contentBrowser.renderGrid(); }, 60);
     this.events.on('characters-changed', charsChanged);
     this.events.on('layers-changed', () => {
