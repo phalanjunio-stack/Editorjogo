@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { newMultisell, newEntry } from './l2/multisell.js';
 import { htmlTemplate, htmlPathFor } from './l2/htmlCore.js';
 import { uid } from './core/util.js';
+import { defaultCharacterDef } from './rig/characters.js';
 
 export function populateExample(app) {
   const p = app.project;
@@ -99,6 +100,17 @@ export function populateExample(app) {
   npc(-5, 62, 90, { npcId: 30039, name: 'Guarda', title: '', type: 'Guard', respawn: 60 });
   npc(5, 62, 90, { npcId: 30039, name: 'Guarda', title: '', type: 'Guard', respawn: 60 });
   npc(0, 130, 90, { npcId: 20120, name: 'Lobo', title: '', type: 'Monster', count: 6, radius: 14, respawn: 30, level: 12, hp: 450, mp: 120, race: 'ANIMAL', aggressive: true, aggroRange: 300, drops: [{ id: 57, chance: 70, min: 12, max: 30 }, { id: 1835, chance: 15, min: 5, max: 20 }] });
+
+  // personagens (aba Personagens): moradores, guardas e o jogador do modo Play
+  const folk = defaultCharacterDef({ name: 'Aldeão', colors: { skin: '#c9a98a', cloth: '#6b5a3a', leather: '#4a3322' } });
+  const guard = defaultCharacterDef({ name: 'Guarda da vila', height: 1.88, colors: { skin: '#b8916e', cloth: '#3a4a66', leather: '#2a2a30' } });
+  const hero = defaultCharacterDef({ name: 'Aventureiro', colors: { skin: '#d2b294', cloth: '#7a2e2e', leather: '#3b2a1c' } });
+  p.characters.push(folk, guard, hero);
+  p.player.character = hero.id;
+  for (const n of p.npcs) {
+    if (n.type === 'Guard') n.character = guard.id;
+    else if (n.type !== 'Monster') n.character = folk.id;
+  }
 
   const bypass = p.server.bypass;
   for (const n of [merchant, smith, gk, wh]) {

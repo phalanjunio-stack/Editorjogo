@@ -28,6 +28,9 @@ import { EditorLog } from './ui/log.js';
 import { Minimap } from './ui/minimap.js';
 import { ThumbRenderer } from './ui/thumbs.js';
 import { PostFX } from './world/post.js';
+import { CharacterLibrary } from './rig/characters.js';
+import { RigLab } from './rig/rigLab.js';
+import { personagensMode } from './modes/personagens.js';
 import { WIND } from './nature/trees.js';
 import { ContentBrowser } from './ui/contentBrowser.js';
 import { Hierarchy } from './ui/hierarchy.js';
@@ -69,7 +72,7 @@ class App {
     this.playing = false;
     this.show = { grama: true, agua: true, nuvens: true, objetos: true, npcs: true, zonas: true, rotulos: true, sombras: true, minimapa: true };
     this.viewMode = 'iluminado';
-    this.modes = [mundoMode, terrenoMode, objetosMode, npcMode, clothMode, multisellMode, htmlMode, exportMode];
+    this.modes = [mundoMode, terrenoMode, objetosMode, npcMode, personagensMode, clothMode, multisellMode, htmlMode, exportMode];
     this.quality = loadQuality();
     this.editorLog = new EditorLog();
     this.log = (msg, type = 'info') => this.editorLog.add(msg, type);
@@ -111,7 +114,7 @@ class App {
     this.modeTabs = el('nav', { class: 'mode-tabs' });
     this.tabButtons = new Map();
     for (const m of this.modes.filter((x) => x.tab !== false)) {
-      const b = el('button', { class: 'mode-tab', type: 'button', title: m.title || m.label }, icon(m.icon, 20), el('span', {}, m.label));
+      const b = el('button', { class: 'mode-tab', type: 'button', title: m.title || m.label }, icon(m.icon, 20), el('span', {}, m.short || m.label));
       b.addEventListener('click', () => this.setMode(m.id));
       this.tabButtons.set(m.id, b);
       this.modeTabs.append(b);
@@ -288,6 +291,8 @@ class App {
     this.city = new CityEditor(this);
     this.scene.add(this.city.root);
     this.capeLab = new CapeLab(this);
+    this.characters = new CharacterLibrary(this);
+    this.rigLab = new RigLab(this);
     this.play = new PlayMode(this);
 
     this.raycaster = new THREE.Raycaster();
@@ -323,6 +328,11 @@ class App {
       paintLayer: (i) => { this.setMode('terreno'); terrenoMode.selectLayer(i); },
       foliage: (p) => { applyFoliagePreset(this, p); if (this.mode?.id === 'terreno') this.refreshPanels(); },
       npcType: (t) => { this.setMode('npc'); npcMode.selectNpcType(t); },
+      character: (id, doImport = false) => {
+        this.setMode('personagens');
+        if (doImport) personagensMode.importCharacter(this);
+        else personagensMode.select(this, id);
+      },
       cloth: (p) => { this.setMode('roupa'); clothMode.applyPreset(p); },
       item: (it) => {
         if (this.mode?.id === 'loja') multisellMode.addItem(it);
@@ -336,6 +346,8 @@ class App {
     this.hierarchySoon = debounce(() => this.hierarchy.render(), 250);
 
     this.minimap = new Minimap(this);
+    const charsChanged = debounce(() => { this.city.refreshCharacters(); this.contentBrowser.renderGrid(); }, 60);
+    this.events.on('characters-changed', charsChanged);
     this.events.on('layers-changed', () => {
       this.minimap.rebuildSoon();
       this.contentBrowser.renderGrid();
@@ -365,6 +377,8 @@ class App {
     this.camera.updateProjectionMatrix();
     this.capeLab.camera.aspect = w / h;
     this.capeLab.camera.updateProjectionMatrix();
+    this.rigLab.camera.aspect = w / h;
+    this.rigLab.camera.updateProjectionMatrix();
   }
 
   // ---------------------------------------------------------------- barras do viewport
@@ -521,13 +535,14 @@ class App {
     this.mode?.exit?.(this);
     this.mode = next;
     for (const [k, b] of this.tabButtons) b.classList.toggle('active', k === id);
-    const is3d = next.view === '3d' || next.view === 'cloth';
+    const is3d = next.view === '3d' || next.view === 'cloth' || next.view === 'rig';
     this.viewport.hidden = !is3d;
     this.docview.hidden = is3d;
-    this.viewport.classList.toggle('cloth', next.view === 'cloth');
+    this.viewport.classList.toggle('cloth', next.view === 'cloth' || next.view === 'rig');
     this.workspace.classList.toggle('doc-mode', !is3d);
     this.controls.enabled = next.view === '3d' && !this.playing;
     this.capeLab.controls.enabled = next.view === 'cloth';
+    this.rigLab.controls.enabled = next.view === 'rig';
     next.enter?.(this);
     this.refreshPanels();
     clear(this.docview);
@@ -536,7 +551,7 @@ class App {
     this.status(next.hint || '');
     // o Navegador de Conteúdo acompanha a aba
     const objFolders = ['Construções', 'Muralhas', 'Decoração', 'Natureza', 'malhas', 'objetos'];
-    const folder = { terreno: 'texturas', npc: 'npcs', roupa: 'roupas', loja: 'itens', html: 'paginas' }[id]
+    const folder = { terreno: 'texturas', npc: 'npcs', personagens: 'modelos', roupa: 'roupas', loja: 'itens', html: 'paginas' }[id]
       || (id === 'objetos' && !objFolders.includes(this.contentBrowser.folder) ? 'Construções' : null);
     if (folder && folder !== this.contentBrowser.folder) this.contentBrowser.open(folder);
     this.contentBrowser.renderGrid();
@@ -762,6 +777,9 @@ class App {
     for (const m of pr.customMeshes) {
       try { await this.city.loadCustomMesh(m); } catch (err) { toast(`Não consegui carregar a malha ${m.name}: ${err.message}`, 'error'); }
     }
+    // personagens e animações antes dos NPCs (eles usam os personagens)
+    await this.characters.loadPacks();
+    await this.characters.loadAll();
     this.city.rebuildAll();
     this.city.select(null);
     this.capeLab.emblemImage = null;
@@ -868,6 +886,7 @@ class App {
     await this.applyProject(p);
     if (kind === 'exemplo') {
       populateExample(this);
+      await this.characters.loadAll();
     } else if (kind === 'montanhas') {
       this.project.name = 'Novo Mundo';
       this.terrain.generate('montanhas', { seed: Math.floor(Math.random() * 9999), height: 80, scale: 200, roughness: 0.5, plateau: 70, plateauHeight: 2 });
@@ -946,6 +965,9 @@ class App {
         this.capeLab.ensureEnvironment();
         this.capeLab.update(dt);
         this.renderer.render(this.capeLab.scene, this.capeLab.camera);
+      } else if (view === 'rig') {
+        this.rigLab.update(dt);
+        this.renderer.render(this.rigLab.scene, this.rigLab.camera);
       }
       this._mapAcc += dt;
       if (this._mapAcc > 0.12) {

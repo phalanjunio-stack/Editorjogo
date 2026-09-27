@@ -13,6 +13,13 @@ import { defaultProject, normalizeProject, DEFAULT_BYPASS, npcDefaults } from '.
 import { ZipWriter } from '../src/core/zip.js';
 import { readZip } from '../src/core/unzip.js';
 import { classifyTexture, assignTextureSet } from '../src/world/pbrNames.js';
+import { readFileSync } from 'node:fs';
+import * as THREE from 'three';
+import { readPsk, readPsa, ueToViewPos } from '../src/rig/actorx.js';
+import { objectFromPsk, clipsFromPsa, rigInfo, retargetClip, adaptClip, resetPose } from '../src/rig/rig.js';
+import { mapHumanoid, humanoidScore } from '../src/rig/humanoid.js';
+import { orientMesh, detectMarkers, decimate, flatTris, rigWeights, skeletonFromMarkers, symmetrize } from '../src/rig/autorig.js';
+import { STANDARD_BONES, buildDefaultCharacter, standardClips, guessSlots } from '../src/rig/standard.js';
 
 let passed = 0;
 const tests = [];
@@ -238,6 +245,142 @@ test('texturas PBR: monta o conjunto e prefere a normal OpenGL', () => {
   assert.equal(set.rough, 'Rock030_2K-JPG_Roughness.jpg');
   // um arquivo só, sem nome conhecido: vira a cor
   assert.deepEqual(assignTextureSet(['minha_grama.png']), { normalDX: false, color: 'minha_grama.png' });
+});
+
+// ---------------------------------------------------------------- personagens e rig
+const FX = new URL('./fixtures/', import.meta.url);
+const golden = JSON.parse(readFileSync(new URL('vr_golden.json', FX)));
+const demoPsk = () => readPsk(readFileSync(new URL('demo_humano.psk', FX)));
+const demoPsa = () => readPsa(readFileSync(new URL('demo_humano.psa', FX)));
+const bonesOf = (o) => o.children.find((c) => c.isSkinnedMesh).skeleton.bones;
+function posedWorld(obj, clip, t) {
+  resetPose(obj);
+  const m = new THREE.AnimationMixer(obj);
+  m.clipAction(clip).play();
+  m.setTime(t);
+  obj.updateMatrixWorld(true);
+  const out = bonesOf(obj).map((b) => new THREE.Vector3().setFromMatrixPosition(b.matrixWorld));
+  m.stopAllAction();
+  m.uncacheRoot(obj);
+  return out;
+}
+
+test('ActorX: lê .psk/.psa igual ao Verdant Rig (pontos, faces, ossos, sequências)', () => {
+  const psk = demoPsk(), psa = demoPsa(), g = golden;
+  assert.equal(psk.points.length / 3, g.psk.points);
+  assert.equal(psk.wedges.length, g.psk.wedges);
+  assert.equal(psk.faces.length, g.psk.faces);
+  assert.equal(psk.bones.length, g.psk.bones);
+  assert.equal(psk.weights.length, g.psk.weights);
+  assert.deepEqual(psk.materials, g.psk.materials);
+  assert.equal(psk.bones[8].name, g.psk.bone8[0]);
+  assert.equal(psk.bones[8].parent, g.psk.bone8[1]);
+  assert.deepEqual(psk.faces[0].w, g.psk.face0);
+  assert.equal(psk.wedges[5].point, g.psk.wedge5[0]);
+  assert.deepEqual(psa.sequences.map((q) => [q.name, q.frames, q.rate, q.first]), g.psa.seqs);
+  assert.equal(psa.keys.length / 8, g.psa.keys);
+});
+
+test('ActorX: pose de descanso e animação do .psa batem com o Verdant Rig (Z-up -> Y-up)', () => {
+  const obj = objectFromPsk(demoPsk());
+  obj.updateMatrixWorld(true);
+  bonesOf(obj).forEach((b, i) => {
+    const p = new THREE.Vector3().setFromMatrixPosition(b.matrixWorld);
+    assert.ok(p.distanceTo(new THREE.Vector3(...ueToViewPos(golden.world[i][1]))) < 1e-4, b.name);
+  });
+  const walk = clipsFromPsa(demoPsa(), obj).find((c) => c.name === 'walk');
+  const at = posedWorld(obj, walk, 10.5 / 30);
+  at.forEach((p, i) => assert.ok(p.distanceTo(new THREE.Vector3(...ueToViewPos(golden.walk10_5[i][1]))) < 1e-3, `quadro 10.5 osso ${i}`));
+});
+
+test('humanoide: reconhece os ossos do L2, Mixamo, Unreal, Blender e os nossos', () => {
+  const chain = (names) => mapHumanoid(names.map((name, i) => ({ name, parent: i - 1 })));
+  const m = chain(['Bip01', 'Bip01 Pelvis', 'Bip01 Spine', 'Bip01 Spine1', 'Bip01 Spine2', 'Bip01 Neck', 'Bip01 Head']);
+  assert.equal(m.get('hips'), 1);
+  assert.equal(m.get('spine'), 2);
+  assert.equal(m.get('chest'), 4);
+  assert.equal(m.get('head'), 6);
+  const leaf = (name) => [...mapHumanoid([{ name: 'hips', parent: -1 }, { name, parent: 0 }])].find(([, i]) => i === 1)?.[0];
+  assert.equal(leaf('mixamorig:LeftForeArm'), 'L_forearm');
+  assert.equal(leaf('mixamorigRightUpLeg'), 'R_thigh');
+  assert.equal(leaf('upperarm_l'), 'L_upperarm');
+  assert.equal(leaf('DEF-shin.R'), 'R_calf');
+  assert.equal(leaf('Bip01 L Finger12'), 'L_index3');
+  assert.equal(leaf('mixamorig:LeftHandThumb1'), 'L_thumb1');
+  assert.equal(leaf('braco_E'), 'L_upperarm');
+  assert.equal(leaf('dedos_pe_D'), 'R_toe');
+  assert.equal(leaf('Shoulder_L_Bone'), undefined); // ombreira do L2 não é osso do corpo
+  const std = rigInfo(buildDefaultCharacter());
+  assert.equal(humanoidScore(std.map), 22);
+});
+
+test('retarget: copiar para o próprio esqueleto não muda nada; girado e maior dá os mesmos ângulos', () => {
+  const obj = objectFromPsk(demoPsk());
+  const info = rigInfo(obj);
+  const walk = clipsFromPsa(demoPsa(), obj).find((c) => c.name === 'walk');
+  const self = retargetClip(walk, info, info);
+  for (const t of [0.1, 0.5]) {
+    const a = posedWorld(obj, walk, t), b = posedWorld(obj, self, t);
+    for (const [, i] of info.map) assert.ok(a[i].distanceTo(b[i]) < 1e-3);
+  }
+  const obj2 = objectFromPsk(demoPsk());
+  const root2 = obj2.children.find((c) => c.isBone);
+  root2.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2));
+  obj2.traverse((o) => { if (o.isBone) o.position.multiplyScalar(2); });
+  const info2 = rigInfo(obj2);
+  const clip2 = retargetClip(walk, info, info2);
+  const a = posedWorld(obj, walk, 0.33), b = posedWorld(obj2, clip2, 0.33);
+  for (const [id, child] of [['L_thigh', 'L_calf'], ['R_upperarm', 'R_forearm']]) {
+    const da = a[info.map.get(child)].clone().sub(a[info.map.get(id)]).normalize().applyQuaternion(info.frame);
+    const db = b[info2.map.get(child)].clone().sub(b[info2.map.get(id)]).normalize().applyQuaternion(info2.frame);
+    assert.ok(da.angleTo(db) < 0.01, id);
+  }
+  assert.ok(Math.abs(b[info2.map.get('hips')].y / a[info.map.get('hips')].y - 2) < 0.01);
+});
+
+test('animações do EditorJogo tocam no esqueleto do L2 (pose T -> braços do L2 em pose A)', () => {
+  const std = buildDefaultCharacter();
+  const src = rigInfo(std);
+  const obj = objectFromPsk(demoPsk());
+  const dst = rigInfo(obj);
+  const idle = standardClips().find((c) => c.name === 'parado');
+  const clip = adaptClip(idle, src, dst);
+  const p = posedWorld(obj, clip, 0.5);
+  // braços caídos ao lado do corpo: a mão fica bem abaixo do ombro
+  const sh = p[dst.map.get('L_upperarm')], hand = p[dst.map.get('L_hand')];
+  assert.ok(sh.y - hand.y > 0.5 * sh.distanceTo(hand), `mão ${hand.y.toFixed(1)} ombro ${sh.y.toFixed(1)}`);
+  assert.deepEqual(Object.keys(guessSlots(['Idle_Battle', 'Run_1HS', 'Walk', 'SpAtk01', 'Death'])).sort(), ['andar', 'atacar', 'correr', 'morrer', 'parado']);
+});
+
+test('rig automático: acha as juntas como o Verdant Rig e os pesos somam 1', () => {
+  const src = readFileSync(new URL('heroina_saia_capa.obj', FX), 'utf8');
+  const pts = [], tris = [];
+  for (const line of src.split('\n')) {
+    const p = line.trim().split(/\s+/);
+    if (p[0] === 'v') pts.push(+p[1], +p[2], +p[3]);
+    else if (p[0] === 'f') {
+      const c = p.slice(1).map((x) => +x.split('/')[0] - 1);
+      for (let k2 = 1; k2 < c.length - 1; k2++) tris.push({ p: [c[0], c[k2], c[k2 + 1]], uv: [[0, 0], [0, 0], [0, 0]], mat: 0 });
+    }
+  }
+  const { points } = orientMesh(Float64Array.from(pts));
+  const flat = flatTris({ tris });
+  const r = detectMarkers(points, flat);
+  const py = JSON.parse(readFileSync(new URL('vr_markers.json', FX))).heroina_saia_capa;
+  for (const id of ['pelvis', 'chest', 'neck', 'head', 'L_hip', 'L_knee', 'L_ankle', 'R_hip', 'R_knee', 'R_ankle', 'L_shoulder']) {
+    const a = r.markers[id], b = py[id];
+    assert.ok(Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) / r.height < 0.04, id);
+  }
+  const sym = symmetrize(r.markers, 'L');
+  assert.ok(Math.abs(sym.R_wrist[0] + sym.L_wrist[0] - 2 * sym.pelvis[0]) < 1e-9);
+  const { pose, tips } = skeletonFromMarkers(r.markers, { top: r.top });
+  const defs = STANDARD_BONES.map((b) => ({ name: b.name, parent: b.parent, canon: b.id, attach: b.attach }));
+  const w = rigWeights(points, flat, defs, pose, tips);
+  assert.equal(w.length, points.length / 3);
+  for (const ws of w) assert.ok(Math.abs(ws.reduce((s2, x) => s2 + x[1], 0) - 1) < 1e-6 && ws.length <= 4);
+  const mesh = { points: [...points], tris: tris.map((t) => ({ ...t })) };
+  const d = decimate(mesh, 1200);
+  assert.ok(d.after <= 1200 && d.after > 1000, `${d.after}`);
 });
 
 for (const t of tests) {

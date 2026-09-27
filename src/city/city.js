@@ -72,6 +72,7 @@ export class CityEditor {
 
     this.nodes = new Map();
     this.cloths = new Map();
+    this.npcChars = new Map(); // uid do NPC -> personagem animado (aba Personagens)
     this.meshTemplates = new Map();
     this.selected = null;
 
@@ -170,7 +171,12 @@ export class CityEditor {
     // malhas importadas compartilham a do modelo.
     const shared = node.userData.sharedGeometry;
     const ownMaterials = node.userData.kind === 'npc' || node.userData.kind === 'zone';
+    if (node.userData.kind === 'npc' && this.npcChars.has(node.userData.uid)) {
+      this.npcChars.get(node.userData.uid).dispose();
+      this.npcChars.delete(node.userData.uid);
+    }
     node.traverse((o) => {
+      if (o.userData.keepResources) return; // malha/materiais do personagem são do modelo-base
       if (o.isSprite) { o.material.map?.dispose(); o.material.dispose(); return; }
       if ((o.isMesh || o.isLine || o.isPoints) && (!shared || o.userData.ownGeometry) && !o.geometry?.userData.shared) o.geometry?.dispose();
       if (ownMaterials && o.material && !o.isSprite) o.material.dispose();
@@ -249,26 +255,40 @@ export class CityEditor {
   _addNpcNode(n) {
     const t = NPC_TYPE_MAP.get(n.type) || NPC_TYPES[5];
     const g = new THREE.Group();
-    const m = new THREE.MeshStandardMaterial({ color: t.color, roughness: 0.6, emissive: t.color, emissiveIntensity: 0.15 });
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 1.1, 4, 12), m);
-    body.position.y = 0.87;
-    body.castShadow = true;
-    body.userData.ownGeometry = true;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), m);
-    head.position.y = 1.78;
-    head.userData.ownGeometry = true;
-    const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.6, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
-    arrow.rotation.z = -Math.PI / 2;
-    arrow.position.set(0.65, 1.1, 0);
-    arrow.userData.ownGeometry = true;
+    // aparência: o personagem escolhido (animado) ou o marcador colorido
+    const inst = n.character ? this.app.characters?.instance(n.character) : null;
+    let top = 2.6;
+    if (inst) {
+      inst.object.rotation.y = Math.PI / 2; // o personagem olha +Z; o NPC olha +X (heading)
+      inst.object.traverse((o) => { o.userData.keepResources = true; });
+      inst.play('parado', { fade: 0 });
+      inst.mixer.setTime(Math.random() * 3); // cada um num ponto da animação
+      this.npcChars.set(n.uid, inst);
+      g.add(inst.object);
+      top = (inst.tpl.def.height || 1.8) + 0.5;
+    } else {
+      const m = new THREE.MeshStandardMaterial({ color: t.color, roughness: 0.6, emissive: t.color, emissiveIntensity: 0.15 });
+      const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 1.1, 4, 12), m);
+      body.position.y = 0.87;
+      body.castShadow = true;
+      body.userData.ownGeometry = true;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 16, 12), m);
+      head.position.y = 1.78;
+      head.userData.ownGeometry = true;
+      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.18, 0.6, 8), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+      arrow.rotation.z = -Math.PI / 2;
+      arrow.position.set(0.65, 1.1, 0);
+      arrow.userData.ownGeometry = true;
+      g.add(body, head, arrow);
+    }
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.7, 24), new THREE.MeshBasicMaterial({ color: t.color, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }));
     ring.rotation.x = -Math.PI / 2;
     ring.position.y = 0.05;
     ring.userData.ownGeometry = true;
     const label = labelSprite(n.title, `${n.name} [${n.npcId}]`);
-    label.position.y = 2.6;
+    label.position.y = top;
     label.visible = this.showLabels !== false;
-    g.add(body, head, arrow, ring, label);
+    g.add(ring, label);
     if (n.count > 1 && n.radius > 0) {
       const area = new THREE.Mesh(new THREE.RingGeometry(n.radius - 0.1, n.radius, 48), new THREE.MeshBasicMaterial({ color: t.color, side: THREE.DoubleSide, transparent: true, opacity: 0.5 }));
       area.rotation.x = -Math.PI / 2;
@@ -783,7 +803,23 @@ export class CityEditor {
   }
 
   // ------------------------------------------------------------ por quadro
+  /** Personagens carregados/alterados: refaz os NPCs que usam personagem. */
+  refreshCharacters() {
+    for (const n of this.project.npcs) {
+      const has = this.npcChars.has(n.uid);
+      if (n.character || has) this.refreshNode('npc', n.uid);
+    }
+  }
+
   update(dt, time) {
+    // NPCs animados (só os perto da câmera, para não pesar)
+    if (this.npcChars.size && this.npcsGroup.visible) {
+      const cam = this.app.camera.position;
+      for (const [, inst] of this.npcChars) {
+        inst.object.getWorldPosition(_tmp);
+        if (_tmp.distanceTo(cam) < 160) inst.update(dt);
+      }
+    }
     if (!this.cloths.size) return;
     const sky = this.app.sky;
     const wind = _wind.set(sky.windDir2.x, 0, sky.windDir2.y).multiplyScalar(2 + sky.windStrength * 9);

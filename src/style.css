@@ -87,7 +87,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .dock { grid-area: dock; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 4px; min-height: 0; }
 .dock-right { display: grid; grid-template-rows: minmax(0, 1fr) 96px; gap: 4px; min-height: 0; }
 
-.mode-tabs { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--line); background: var(--bg-2); }
+.mode-tabs { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-bottom: 1px solid var(--line); background: var(--bg-2); }
 .mode-tab { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 0 6px; border: 0; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 10.5px; letter-spacing: -0.1px; min-width: 0; }
 .mode-tab span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mode-tab:hover { color: var(--text); background: var(--bg-3); }
@@ -412,3 +412,12 @@ kbd { font-family: var(--mono); font-size: 11px; background: var(--bg-3); border
   .vp-minimap { width: 110px; height: 110px; }
   .pill span { display: none; }
 }
+
+/* ================= aba Personagens ================= */
+.char-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
+.char-row { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg-2); color: var(--text); text-align: left; cursor: pointer; }
+.char-row:hover { border-color: var(--line-2); background: var(--bg-3); }
+.char-row.active { border-color: var(--accent); background: var(--accent-bg); }
+.char-row .icon { color: var(--text-dim); }
+.char-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.char-meta { flex: none; font-size: 11px; color: var(--text-faint); }

@@ -2,6 +2,7 @@
 // (abre o HTML ligado a eles e as multisells), como um teste rápido do servidor.
 import * as THREE from 'three';
 import { Mannequin } from '../cloth/mannequin.js';
+import { CharacterActor } from '../rig/actor.js';
 import { ClothSim, makeClothMeshes, disposeClothMeshes } from '../cloth/cloth.js';
 import { renderL2Html, l2Window, renderMultisellWindow } from '../l2/htmlPreview.js';
 import { interpretBypass } from '../l2/htmlCore.js';
@@ -36,7 +37,10 @@ export class PlayMode {
     app.city.gizmoHelper.visible = false;
 
     const t = app.controls.target;
-    const char = (this.char = new Mannequin('#d8c3a5'));
+    // o personagem do jogador (aba Personagens) ou o manequim de teste
+    const pid = app.project.player?.character;
+    const inst = pid ? app.characters.instance(pid) : null;
+    const char = (this.char = inst ? new CharacterActor(inst) : new Mannequin('#d8c3a5'));
     char.root.position.set(t.x, app.terrain.heightAt(t.x, t.z), t.z);
     app.scene.add(char.root);
     const dir = new THREE.Vector3().subVectors(t, app.camera.position);
@@ -44,7 +48,7 @@ export class PlayMode {
     this.facing = Math.atan2(dir.z, dir.x);
     char.root.rotation.y = this.yaw;
     char.root.updateMatrixWorld(true);
-    char.animate(0, 'parado');
+    if (char.animate) char.animate(0, 'parado');
 
     const preset = app.project.cloth.current;
     if (preset.type !== 'bandeira') {
@@ -148,7 +152,7 @@ export class PlayMode {
     const fwd = (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0);
     const side = (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0);
     const run = k.has('shift');
-    const speed = (fwd || side) && !this.dialog ? (run ? 8 : 4) : 0;
+    const speed = (fwd || side) && !this.dialog ? (run ? 7 : 3) : 0;
     // direção relativa à câmera
     const cf = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     const cr = new THREE.Vector3(-cf.z, 0, cf.x);

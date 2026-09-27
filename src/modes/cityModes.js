@@ -228,6 +228,12 @@ const base = {
     number(d, 'MP', n, 'mp', { min: 0, step: 100, onChange: () => app.markDirty() });
     select(d, 'Facção', n, 'type', NPC_TYPES.map((x) => ({ value: x.id, label: x.label })), { onChange: edit('Tipo do NPC') });
     select(d, 'Raça', n, 'race', RACES, { onChange: () => app.markDirty() });
+    const looks = [{ value: '', label: 'Marcador (cápsula)' }, ...app.project.characters.map((ch) => ({ value: ch.id, label: `Personagem: ${ch.name}` }))];
+    const look = { v: n.character || '' };
+    select(d, 'Aparência', look, 'v', looks, {
+      onChange: (v) => this._edit(app, 'Aparência do NPC', () => { n.character = v || null; refresh(); }),
+      title: 'Como o NPC aparece no editor e no modo Play (crie personagens na aba Personagens)',
+    });
     checkbox(d, 'NPC novo (gerar template no servidor)', n, 'customTemplate', { onChange: () => { app.markDirty(); app.refreshRight(); }, title: 'Cria data/stats/npcs/custom/… com Level, HP, MP, IA e drops' });
     if (n.customTemplate) number(d, 'Aparência (displayId)', n, 'displayId', { min: 0, step: 1, onChange: () => app.markDirty(), title: 'ID de um NPC existente cujo modelo 3D o cliente vai usar' });
 

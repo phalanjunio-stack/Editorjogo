@@ -21,6 +21,7 @@ const TREE = [
       { id: 'folhagem', label: 'Folhagem' },
     ] },
     { id: 'personagens', label: 'Personagens', children: [
+      { id: 'modelos', label: 'Personagens 3D' },
       { id: 'npcs', label: 'NPCs' },
       { id: 'roupas', label: 'Roupas e capas' },
     ] },
@@ -147,6 +148,12 @@ export class ContentBrowser {
         if (!foliageCache.has(p.id)) foliageCache.set(p.id, foliageThumb(p));
         out.push({ key: `f:${p.id}`, label: p.name, src: foliageCache.get(p.id), active: app.project.grass.preset === p.id, onClick: () => A.foliage(p) });
       }
+    }
+    if (f === 'modelos' || f === 'personagens') {
+      for (const c of app.project.characters) {
+        out.push({ key: `ch:${c.id}`, label: c.name, sub: app.project.player.character === c.id ? 'jogador' : '', iconName: 'user', color: c.colors?.cloth || '#9aa3ad', onClick: () => A.character(c.id) });
+      }
+      if (f === 'modelos') out.push({ key: 'ch-import', label: 'Importar personagem…', iconName: 'upload', onClick: () => A.character(null, true) });
     }
     if (f === 'npcs' || f === 'personagens') {
       for (const t of NPC_TYPES) {

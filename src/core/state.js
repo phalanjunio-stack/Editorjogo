@@ -127,6 +127,9 @@ export function defaultProject() {
     htmls: [], // { uid, path, content }
     items: [], // itens importados { id, name, type }
     cloth: { current: defaultClothPreset(), presets: [] },
+    characters: [], // personagens: { id, name, kind:'padrao'|'importado', height, colors, glb(base64), slots:{parado:'clipe'...} }
+    animPacks: [], // pacotes de animação guardados: { id, name, files:[{name, data(base64)}] }
+    player: { character: null }, // personagem do modo Play (null = boneco de teste)
   };
 }
 
@@ -142,10 +145,14 @@ export function normalizeProject(p) {
   out.sky = { ...d.sky, ...(p.sky || {}) };
   out.grass = { ...d.grass, ...(p.grass || {}) };
   out.cloth = { current: { ...defaultClothPreset(), ...((p.cloth && p.cloth.current) || {}) }, presets: (p.cloth && p.cloth.presets) || [] };
-  for (const k of ['objects', 'npcs', 'zones', 'customMeshes', 'multisells', 'htmls', 'items']) {
+  out.player = { ...d.player, ...(p.player || {}) };
+  for (const k of ['objects', 'npcs', 'zones', 'customMeshes', 'multisells', 'htmls', 'items', 'characters', 'animPacks']) {
     if (!Array.isArray(out[k])) out[k] = [];
   }
-  out.npcs = out.npcs.map((n) => ({ ...npcDefaults(n.type), ...n }));
+  out.npcs = out.npcs.map((n) => ({ ...npcDefaults(n.type), character: null, ...n }));
+  const ids = new Set(out.characters.map((c) => c.id));
+  for (const n of out.npcs) if (n.character && !ids.has(n.character)) n.character = null;
+  if (out.player.character && !ids.has(out.player.character)) out.player.character = null;
   return out;
 }
 
