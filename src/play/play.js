@@ -35,6 +35,7 @@ export class PlayMode {
     app.terrain.setBrush(false);
     app.city.helpers.visible = false;
     app.city.gizmoHelper.visible = false;
+    this.phys = app.city.collectPhysics(); // paredes e pontes das construções
 
     const t = app.controls.target;
     // o personagem do jogador (aba Personagens) ou o manequim de teste
@@ -144,6 +145,36 @@ export class PlayMode {
     }
   }
 
+  /** Parede de alguma construção no caminho? */
+  _blocked(x, z, y) {
+    const r = 0.35;
+    for (const w of this.phys?.walls || []) {
+      if (y > w.top || y + 1.7 < w.bottom) continue;
+      const dx = w.bx - w.ax, dz = w.bz - w.az;
+      const l2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - w.ax) * dx + (z - w.az) * dz) / l2));
+      const px = w.ax + dx * t - x, pz = w.az + dz * t - z;
+      if (px * px + pz * pz < (w.t / 2 + r) ** 2) return true;
+    }
+    return false;
+  }
+
+  /** Chão: terreno ou tabuleiro de ponte (se dá para subir nele daqui). */
+  _groundAt(x, z, y) {
+    let g = this.app.terrain.heightAt(x, z);
+    for (const d of this.phys?.decks || []) {
+      const dx = d.bx - d.ax, dz = d.bz - d.az;
+      const l2 = dx * dx + dz * dz || 1;
+      const t = ((x - d.ax) * dx + (z - d.az) * dz) / l2;
+      if (t < 0 || t > 1) continue;
+      const px = d.ax + dx * t - x, pz = d.az + dz * t - z;
+      if (px * px + pz * pz > (d.w / 2) ** 2) continue;
+      const dy = d.ay + (d.by - d.ay) * t + Math.sin(t * Math.PI) * d.rise;
+      if (dy <= y + 0.8 && dy > g) g = dy;
+    }
+    return g;
+  }
+
   update(dt) {
     const app = this.app;
     const T = app.terrain;
@@ -157,17 +188,24 @@ export class PlayMode {
     const cf = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
     const cr = new THREE.Vector3(-cf.z, 0, cf.x);
     const move = cf.multiplyScalar(fwd).add(cr.multiplyScalar(side));
-    const onGround = root.position.y <= T.heightAt(root.position.x, root.position.z) + 0.02;
+    const onGround = root.position.y <= this._groundAt(root.position.x, root.position.z, root.position.y) + 0.02;
     if (speed > 0 && move.lengthSq() > 0) {
       move.normalize();
       const nx = root.position.x + move.x * speed * dt, nz = root.position.z + move.z * speed * dt;
       const water = app.project.terrain.waterEnabled ? app.project.terrain.waterLevel : -1e9;
       // não sobe paredes muito íngremes nem entra em água funda
-      const slopeOk = T.slopeAt(nx, nz) < 48 || T.heightAt(nx, nz) < T.heightAt(root.position.x, root.position.z);
-      if (T.inside(nx, nz) && slopeOk && T.heightAt(nx, nz) > water - 1.2) {
-        root.position.x = nx;
-        root.position.z = nz;
-      }
+      const y = root.position.y;
+      const onDeck = (px, pz) => this._groundAt(px, pz, y) > T.heightAt(px, pz) + 0.05;
+      const can = (px, pz) => {
+        if (!T.inside(px, pz) || this._blocked(px, pz, y)) return false;
+        if (onDeck(px, pz)) return true;
+        const slopeOk = T.slopeAt(px, pz) < 48 || T.heightAt(px, pz) < T.heightAt(root.position.x, root.position.z);
+        return slopeOk && T.heightAt(px, pz) > water - 1.2;
+      };
+      // encosta na parede e desliza ao longo dela
+      if (can(nx, nz)) { root.position.x = nx; root.position.z = nz; }
+      else if (can(nx, root.position.z)) root.position.x = nx;
+      else if (can(root.position.x, nz)) root.position.z = nz;
       const target = Math.atan2(move.x, move.z);
       let d = target - root.rotation.y;
       d = Math.atan2(Math.sin(d), Math.cos(d));
@@ -175,7 +213,7 @@ export class PlayMode {
     }
     this.facing = Math.atan2(Math.cos(root.rotation.y), Math.sin(root.rotation.y));
     // gravidade e pulo
-    const ground = T.heightAt(root.position.x, root.position.z);
+    const ground = this._groundAt(root.position.x, root.position.z, root.position.y);
     if (k.has(' ') && onGround && !this.dialog) this.velY = 5.5;
     this.velY -= 18 * dt;
     root.position.y += this.velY * dt;

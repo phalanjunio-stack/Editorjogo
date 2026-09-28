@@ -6,6 +6,7 @@ import { NPC_TYPES } from '../city/city.js';
 import { FOLIAGE_PRESETS } from '../core/state.js';
 import { CLOTH_PRESETS } from '../cloth/capeLab.js';
 import { foliageThumb, textureThumb } from './thumbs.js';
+import { MAT_CATEGORIES } from '../materials/library.js';
 
 const TREE = [
   { id: 'conteudo', label: 'Conteúdo', children: [
@@ -15,7 +16,9 @@ const TREE = [
       { id: 'Decoração', label: 'Decoração' },
       { id: 'Natureza', label: 'Natureza' },
       { id: 'malhas', label: 'Minhas malhas' },
+      { id: 'estruturas', label: 'Minhas construções' },
     ] },
+    { id: 'materiais', label: 'Materiais', children: MAT_CATEGORIES.map((c) => ({ id: `mat-${c.id}`, label: c.label })) },
     { id: 'terreno', label: 'Terreno', children: [
       { id: 'texturas', label: 'Texturas' },
       { id: 'folhagem', label: 'Folhagem' },
@@ -131,6 +134,24 @@ export class ContentBrowser {
         });
       }
       if (f === 'malhas') out.push({ key: 'import', label: 'Importar malha…', iconName: 'upload', onClick: () => A.importMesh() });
+    }
+    if (f === 'estruturas' || f === 'objetos' || f === 'conteudo') {
+      for (const st of app.project.structures || []) {
+        out.push({
+          key: `s:${st.id}:${st.rev || 0}`,
+          label: st.name,
+          thumb: (cb) => app.thumbs.structure(st.id, cb),
+          active: app.city.placeRef === `struct:${st.id}` && app.city.tool === 'colocar',
+          onClick: () => A.placePrefab(`struct:${st.id}`),
+        });
+      }
+      if (f === 'estruturas') out.push({ key: 'new-struct', label: 'Nova construção…', iconName: 'building', onClick: () => A.mode('construtor') });
+    }
+    if (f === 'materiais' || f.startsWith('mat-')) {
+      const cat = f.startsWith('mat-') ? f.slice(4) : null;
+      for (const m of app.materials.list(cat)) {
+        out.push({ key: `mt:${m.id}:${m.rev || 0}`, label: m.name, thumb: (cb) => app.thumbs.material(m.id, cb), onClick: () => A.material(m.id) });
+      }
     }
     if (f === 'texturas' || f === 'terreno') {
       app.project.terrain.layers.forEach((l, i) => {

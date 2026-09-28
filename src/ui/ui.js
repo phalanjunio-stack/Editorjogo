@@ -288,6 +288,25 @@ export function pickFiles(accept = '*', multiple = false) {
   });
 }
 
+// Escolhe uma pasta inteira (com subpastas); cada arquivo vem com o caminho relativo.
+export function pickFolder() {
+  return new Promise((resolve) => {
+    const input = el('input', { type: 'file', multiple: true, style: { display: 'none' } });
+    input.webkitdirectory = true;
+    document.body.append(input);
+    input.addEventListener('change', () => {
+      resolve([...input.files]);
+      input.remove();
+    });
+    input.click();
+  });
+}
+
+// File[] -> [{name (com a pasta), bytes}]
+export async function filesToEntries(files) {
+  return Promise.all(files.map(async (f) => ({ name: f.webkitRelativePath || f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
+}
+
 let toastHost = null;
 let toastHook = null;
 export function setToastHook(fn) {

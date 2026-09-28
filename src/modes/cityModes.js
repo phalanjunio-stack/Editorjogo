@@ -1,6 +1,8 @@
 // Abas "Objetos" (peças, natureza, muralhas) e "NPC" (spawns, dados do NPC, zonas).
 // As duas compartilham o editor de cidade (seleção, gizmo W/E/R, desfazer).
-import { section, slider, number, select, checkbox, color, button, buttonRow, hint, toolGrid, el, text, toast, promptBox, readFileAs, pickFiles, confirmBox } from '../ui/ui.js';
+import { section, slider, number, select, checkbox, color, button, buttonRow, hint, toolGrid, el, text, toast, promptBox, readFileAs, pickFiles, pickFolder, filesToEntries, confirmBox } from '../ui/ui.js';
+import { groupModelFiles } from '../city/meshImport.js';
+import { readZip } from '../core/unzip.js';
 import { icon } from '../ui/icons.js';
 import { PREFABS, PREFAB_MAP } from '../city/prefabs.js';
 import { NPC_TYPES, NPC_TYPE_MAP, ZONE_TYPES } from '../city/city.js';
@@ -132,9 +134,17 @@ const base = {
     const def = o.kind === 'prefab' ? PREFAB_MAP.get(o.ref) : null;
     const head = section(root, def ? def.name : o.name, { icon: 'cube' });
     const thumb = el('div', { class: 'prop-preview' });
-    const url = o.kind === 'prefab' ? app.thumbs.prefab(o.ref, (u) => { thumb.style.backgroundImage = `url("${u}")`; }) : app.thumbs.mesh(o.ref, (u) => { thumb.style.backgroundImage = `url("${u}")`; });
+    const setT = (u) => { thumb.style.backgroundImage = `url("${u}")`; };
+    const url = o.kind === 'prefab' ? app.thumbs.prefab(o.ref, setT) : o.kind === 'struct' ? app.thumbs.structure(o.ref, setT) : app.thumbs.mesh(o.ref, setT);
     if (url) thumb.style.backgroundImage = `url("${url}")`;
-    head.append(el('div', { class: 'prop-head' }, thumb, el('div', {}, el('b', {}, o.name), el('div', { class: 'hint' }, def ? `Peça: ${def.cat}` : 'Malha importada'))));
+    head.append(el('div', { class: 'prop-head' }, thumb, el('div', {}, el('b', {}, o.name), el('div', { class: 'hint' }, def ? `Peça: ${def.cat}` : o.kind === 'struct' ? 'Construção do Construtor' : 'Malha importada'))));
+    if (o.kind === 'struct') button(head, 'Editar no Construtor', () => app.setMode('construtor'), { icon: 'building', variant: 'primary' });
+    if (o.kind === 'mesh') {
+      const m = app.project.customMeshes.find((x) => x.id === o.ref);
+      const n = Object.keys(m?.files || {}).filter((f) => /\.(png|jpe?g|webp|tga|bmp)$/i.test(f)).length;
+      hint(head, `${n} textura(s) guardada(s) com a malha${m?.linked?.length ? ` — ligadas pelo nome: ${m.linked.join(', ')}` : ''}.`);
+      button(head, 'Adicionar texturas…', () => objetosMode.addMeshTextures(o.ref), { icon: 'image', title: 'Escolha as imagens (ou .zip/.mtl): elas são ligadas aos materiais pelo nome' });
+    }
     text(head, 'Nome', o, 'name', { onChange: () => { app.markDirty(); app.hierarchy.render(); } });
 
     const tr = section(root, 'Transform', { icon: 'move' });
@@ -501,33 +511,83 @@ export const objetosMode = {
       this._pathButtons(s, app, () => c.finishWall());
     }
     const imp = section(root, 'Minhas malhas', { icon: 'upload', open: c.tool === 'selecionar' });
-    button(imp, 'Importar malha (GLB, FBX, OBJ)…', () => this.importMesh(), { icon: 'upload' });
-    hint(imp, 'Construções e props feitos no Blender. Exporte como .glb (texturas embutidas). FBX em centímetros: escala 0.01. Elas aparecem em Conteúdo › Objetos › Minhas malhas.');
+    buttonRow(imp,
+      button(null, 'Arquivos…', () => this.importMesh(), { icon: 'upload', title: 'O modelo (GLB, GLTF, FBX, OBJ) e as texturas dele (.png/.jpg/.tga, .mtl, .bin), ou um .zip' }),
+      button(null, 'Pasta…', () => this.importMesh(true), { icon: 'folderOpen', title: 'Uma pasta com o modelo e as texturas' }),
+    );
+    hint(imp, 'Mande o modelo junto com as texturas (ou a pasta inteira): GLTF com .bin, OBJ com .mtl e FBX com as imagens. Se o modelo não disser qual textura usar, elas são ligadas pelo nome (material "Parede" → parede_color.png, parede_normal.png…). FBX em centímetros: escala 0.01.');
     this._snapSection(root, app);
   },
 
-  async importMesh() {
+  /** Importa malhas com as texturas: arquivos soltos, pasta ou .zip (GLB, GLTF+bin, OBJ+MTL, FBX). */
+  async importMesh(fromFolder = false) {
     const app = this.app;
-    const files = await pickFiles('.glb,.gltf,.fbx,.obj', true);
-    for (const f of files) {
+    const files = fromFolder ? await pickFolder() : await pickFiles('.glb,.gltf,.bin,.fbx,.obj,.mtl,.png,.jpg,.jpeg,.webp,.tga,.bmp,.zip', true);
+    if (!files.length) return;
+    await this.importMeshEntries(await filesToEntries(files));
+  },
+
+  async importMeshEntries(raw, { scale = null } = {}) {
+    const app = this.app;
+    const entries = [];
+    for (const e of raw) {
+      if (/\.zip$/i.test(e.name)) {
+        const baseName = e.name.replace(/\.zip$/i, '').split(/[\\/]/).pop();
+        for (const z of await readZip(e.bytes)) entries.push({ name: `${baseName}/${z.name}`, bytes: z.bytes });
+      } else entries.push(e);
+    }
+    const groups = groupModelFiles(entries);
+    if (!groups.length) { toast('Nenhum modelo (GLB, GLTF, FBX ou OBJ) nesses arquivos.', 'warn'); return []; }
+    const made = [];
+    for (const g of groups) {
+      const f = g.model;
       const ext = f.name.split('.').pop().toLowerCase();
-      const scaleStr = await promptBox(`Escala de "${f.name}" (1 = metros; 0.01 = centímetros)`, ext === 'fbx' ? '0.01' : '1');
-      if (scaleStr === null) continue;
-      if (ext === 'gltf') toast('Arquivos .gltf com texturas separadas não funcionam: exporte como .glb (tudo em um arquivo).', 'warn', 6000);
-      const buf = new Uint8Array(await readFileAs(f, 'arraybuffer'));
-      const entry = { id: uid('malha'), name: f.name.replace(/\.[^.]+$/, ''), format: ext === 'gltf' ? 'glb' : ext, data: bytesToBase64(buf), scale: parseFloat(scaleStr) || 1 };
+      let sc = scale;
+      if (sc === null) {
+        const scaleStr = await promptBox(`Escala de "${f.name.split('/').pop()}" (1 = metros; 0.01 = centímetros)`, ext === 'fbx' ? '0.01' : '1');
+        if (scaleStr === null) continue;
+        sc = parseFloat(String(scaleStr).replace(',', '.')) || 1;
+      }
+      const res = {};
+      for (const r of g.resources) res[r.name.split('/').slice(-2).join('/')] = bytesToBase64(r.bytes);
+      const entry = { id: uid('malha'), name: f.name.split('/').pop().replace(/\.[^.]+$/, ''), format: ext, data: bytesToBase64(f.bytes), scale: sc, files: res };
       try {
         await app.city.loadCustomMesh(entry);
         app.project.customMeshes.push(entry);
         const size = app.city.meshSize(entry.id);
-        app.log(`Malha "${entry.name}" importada (${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} m).`);
-        app.markDirty();
-        app.contentBrowser.open('malhas');
-        this.selectPlacement(`mesh:${entry.id}`);
+        const tex = Object.keys(res).filter((n) => /\.(png|jpe?g|webp|tga|bmp)$/i.test(n)).length;
+        app.log(`Malha "${entry.name}" importada (${size.x.toFixed(1)} × ${size.y.toFixed(1)} × ${size.z.toFixed(1)} m)${tex ? `, ${tex} textura(s)` : ''}${entry.linked?.length ? `; ligadas pelo nome: ${entry.linked.join(', ')}` : ''}.`, 'ok');
+        made.push(entry);
       } catch (err) {
         toast(`Erro ao importar ${f.name}: ${err.message}`, 'error', 6000);
       }
     }
+    if (made.length) {
+      app.markDirty();
+      app.contentBrowser.open('malhas');
+      this.selectPlacement(`mesh:${made.at(-1).id}`);
+    }
+    return made;
+  },
+
+  /** Junta mais texturas a uma malha já importada e recarrega (ligação automática pelos nomes). */
+  async addMeshTextures(id) {
+    const app = this.app;
+    const m = app.project.customMeshes.find((x) => x.id === id);
+    if (!m) return;
+    const files = await pickFiles('.png,.jpg,.jpeg,.webp,.tga,.bmp,.mtl,.bin,.zip', true);
+    if (!files.length) return;
+    m.files ||= {};
+    for (const e of await filesToEntries(files)) {
+      if (/\.zip$/i.test(e.name)) for (const z of await readZip(e.bytes)) m.files[z.name] = bytesToBase64(z.bytes);
+      else m.files[e.name] = bytesToBase64(e.bytes);
+    }
+    await app.city.loadCustomMesh(m);
+    app.thumbs.forget(`mesh:${id}`);
+    for (const o of app.project.objects) if (o.kind === 'mesh' && o.ref === id) app.city.refreshNode('object', o.uid);
+    app.markDirty();
+    app.contentBrowser.renderGrid();
+    app.log(`Texturas de "${m.name}": ${m.linked?.length ? m.linked.join(', ') : 'nenhum material casou com os nomes'}`, m.linked?.length ? 'ok' : 'warn');
   },
 
   async removeMesh(id) {

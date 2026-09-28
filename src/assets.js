@@ -40,6 +40,75 @@ import b_roof_tiles_arm from '../assets/textures/building/roof_tiles_arm.webp';
 import b_roof_slates_diff from '../assets/textures/building/roof_slates_diff.webp';
 import b_roof_slates_nor from '../assets/textures/building/roof_slates_nor.webp';
 import b_roof_slates_arm from '../assets/textures/building/roof_slates_arm.webp';
+import m_tijolo_novo_diff from '../assets/textures/material/tijolo_novo_diff.webp';
+import m_tijolo_novo_nor from '../assets/textures/material/tijolo_novo_nor.webp';
+import m_tijolo_novo_arh from '../assets/textures/material/tijolo_novo_arh.webp';
+import m_tijolo_velho_diff from '../assets/textures/material/tijolo_velho_diff.webp';
+import m_tijolo_velho_nor from '../assets/textures/material/tijolo_velho_nor.webp';
+import m_tijolo_velho_arh from '../assets/textures/material/tijolo_velho_arh.webp';
+import m_tijolo_rebocado_diff from '../assets/textures/material/tijolo_rebocado_diff.webp';
+import m_tijolo_rebocado_nor from '../assets/textures/material/tijolo_rebocado_nor.webp';
+import m_tijolo_rebocado_arh from '../assets/textures/material/tijolo_rebocado_arh.webp';
+import m_reboco_quebrado_diff from '../assets/textures/material/reboco_quebrado_diff.webp';
+import m_reboco_quebrado_nor from '../assets/textures/material/reboco_quebrado_nor.webp';
+import m_reboco_quebrado_arh from '../assets/textures/material/reboco_quebrado_arh.webp';
+import m_reboco_musgo_diff from '../assets/textures/material/reboco_musgo_diff.webp';
+import m_reboco_musgo_nor from '../assets/textures/material/reboco_musgo_nor.webp';
+import m_reboco_musgo_arh from '../assets/textures/material/reboco_musgo_arh.webp';
+import m_taipa_diff from '../assets/textures/material/taipa_diff.webp';
+import m_taipa_nor from '../assets/textures/material/taipa_nor.webp';
+import m_taipa_arh from '../assets/textures/material/taipa_arh.webp';
+import m_madeira_escura_diff from '../assets/textures/material/madeira_escura_diff.webp';
+import m_madeira_escura_nor from '../assets/textures/material/madeira_escura_nor.webp';
+import m_madeira_escura_arh from '../assets/textures/material/madeira_escura_arh.webp';
+import m_madeira_clara_diff from '../assets/textures/material/madeira_clara_diff.webp';
+import m_madeira_clara_nor from '../assets/textures/material/madeira_clara_nor.webp';
+import m_madeira_clara_arh from '../assets/textures/material/madeira_clara_arh.webp';
+import m_madeira_velha_diff from '../assets/textures/material/madeira_velha_diff.webp';
+import m_madeira_velha_nor from '../assets/textures/material/madeira_velha_nor.webp';
+import m_madeira_velha_arh from '../assets/textures/material/madeira_velha_arh.webp';
+import m_madeira_rachada_diff from '../assets/textures/material/madeira_rachada_diff.webp';
+import m_madeira_rachada_nor from '../assets/textures/material/madeira_rachada_nor.webp';
+import m_madeira_rachada_arh from '../assets/textures/material/madeira_rachada_arh.webp';
+import m_madeira_umida_diff from '../assets/textures/material/madeira_umida_diff.webp';
+import m_madeira_umida_nor from '../assets/textures/material/madeira_umida_nor.webp';
+import m_madeira_umida_arh from '../assets/textures/material/madeira_umida_arh.webp';
+import m_toras_diff from '../assets/textures/material/toras_diff.webp';
+import m_toras_nor from '../assets/textures/material/toras_nor.webp';
+import m_toras_arh from '../assets/textures/material/toras_arh.webp';
+import m_pedra_bruta_diff from '../assets/textures/material/pedra_bruta_diff.webp';
+import m_pedra_bruta_nor from '../assets/textures/material/pedra_bruta_nor.webp';
+import m_pedra_bruta_arh from '../assets/textures/material/pedra_bruta_arh.webp';
+import m_pedra_talhada_diff from '../assets/textures/material/pedra_talhada_diff.webp';
+import m_pedra_talhada_nor from '../assets/textures/material/pedra_talhada_nor.webp';
+import m_pedra_talhada_arh from '../assets/textures/material/pedra_talhada_arh.webp';
+import m_alvenaria_pesada_diff from '../assets/textures/material/alvenaria_pesada_diff.webp';
+import m_alvenaria_pesada_nor from '../assets/textures/material/alvenaria_pesada_nor.webp';
+import m_alvenaria_pesada_arh from '../assets/textures/material/alvenaria_pesada_arh.webp';
+import m_bloco_antigo_diff from '../assets/textures/material/bloco_antigo_diff.webp';
+import m_bloco_antigo_nor from '../assets/textures/material/bloco_antigo_nor.webp';
+import m_bloco_antigo_arh from '../assets/textures/material/bloco_antigo_arh.webp';
+import m_pedra_musgo_diff from '../assets/textures/material/pedra_musgo_diff.webp';
+import m_pedra_musgo_nor from '../assets/textures/material/pedra_musgo_nor.webp';
+import m_pedra_musgo_arh from '../assets/textures/material/pedra_musgo_arh.webp';
+import m_telha_velha_diff from '../assets/textures/material/telha_velha_diff.webp';
+import m_telha_velha_nor from '../assets/textures/material/telha_velha_nor.webp';
+import m_telha_velha_arh from '../assets/textures/material/telha_velha_arh.webp';
+import m_shingle_madeira_diff from '../assets/textures/material/shingle_madeira_diff.webp';
+import m_shingle_madeira_nor from '../assets/textures/material/shingle_madeira_nor.webp';
+import m_shingle_madeira_arh from '../assets/textures/material/shingle_madeira_arh.webp';
+import m_palha_diff from '../assets/textures/material/palha_diff.webp';
+import m_palha_nor from '../assets/textures/material/palha_nor.webp';
+import m_palha_arh from '../assets/textures/material/palha_arh.webp';
+import m_porta_madeira_diff from '../assets/textures/material/porta_madeira_diff.webp';
+import m_porta_madeira_nor from '../assets/textures/material/porta_madeira_nor.webp';
+import m_porta_madeira_arh from '../assets/textures/material/porta_madeira_arh.webp';
+import m_ferro_velho_diff from '../assets/textures/material/ferro_velho_diff.webp';
+import m_ferro_velho_nor from '../assets/textures/material/ferro_velho_nor.webp';
+import m_ferro_velho_arh from '../assets/textures/material/ferro_velho_arh.webp';
+import m_tecido_corda_diff from '../assets/textures/material/tecido_corda_diff.webp';
+import m_tecido_corda_nor from '../assets/textures/material/tecido_corda_nor.webp';
+import m_tecido_corda_arh from '../assets/textures/material/tecido_corda_arh.webp';
 import bark_oak_color from '../assets/textures/tree/bark_oak_color.webp';
 import bark_oak_normal from '../assets/textures/tree/bark_oak_normal.webp';
 import bark_pine_color from '../assets/textures/tree/bark_pine_color.webp';
@@ -71,6 +140,34 @@ export const BUILDING_SETS = {
   wood: set(b_wood_diff, b_wood_nor, b_wood_arm),
   roofTiles: set(b_roof_tiles_diff, b_roof_tiles_nor, b_roof_tiles_arm),
   roofSlates: set(b_roof_slates_diff, b_roof_slates_nor, b_roof_slates_arm),
+};
+
+// Biblioteca de materiais (Construtor): cor, normal e ARH (R oclusão, G rugosidade, B altura).
+// Os conjuntos das construções acima também guardam a altura no azul do ARM.
+export const MATERIAL_SETS = {
+  tijolo_novo: { color: m_tijolo_novo_diff, normal: m_tijolo_novo_nor, arh: m_tijolo_novo_arh },
+  tijolo_velho: { color: m_tijolo_velho_diff, normal: m_tijolo_velho_nor, arh: m_tijolo_velho_arh },
+  tijolo_rebocado: { color: m_tijolo_rebocado_diff, normal: m_tijolo_rebocado_nor, arh: m_tijolo_rebocado_arh },
+  reboco_quebrado: { color: m_reboco_quebrado_diff, normal: m_reboco_quebrado_nor, arh: m_reboco_quebrado_arh },
+  reboco_musgo: { color: m_reboco_musgo_diff, normal: m_reboco_musgo_nor, arh: m_reboco_musgo_arh },
+  taipa: { color: m_taipa_diff, normal: m_taipa_nor, arh: m_taipa_arh },
+  madeira_escura: { color: m_madeira_escura_diff, normal: m_madeira_escura_nor, arh: m_madeira_escura_arh },
+  madeira_clara: { color: m_madeira_clara_diff, normal: m_madeira_clara_nor, arh: m_madeira_clara_arh },
+  madeira_velha: { color: m_madeira_velha_diff, normal: m_madeira_velha_nor, arh: m_madeira_velha_arh },
+  madeira_rachada: { color: m_madeira_rachada_diff, normal: m_madeira_rachada_nor, arh: m_madeira_rachada_arh },
+  madeira_umida: { color: m_madeira_umida_diff, normal: m_madeira_umida_nor, arh: m_madeira_umida_arh },
+  toras: { color: m_toras_diff, normal: m_toras_nor, arh: m_toras_arh },
+  pedra_bruta: { color: m_pedra_bruta_diff, normal: m_pedra_bruta_nor, arh: m_pedra_bruta_arh },
+  pedra_talhada: { color: m_pedra_talhada_diff, normal: m_pedra_talhada_nor, arh: m_pedra_talhada_arh },
+  alvenaria_pesada: { color: m_alvenaria_pesada_diff, normal: m_alvenaria_pesada_nor, arh: m_alvenaria_pesada_arh },
+  bloco_antigo: { color: m_bloco_antigo_diff, normal: m_bloco_antigo_nor, arh: m_bloco_antigo_arh },
+  pedra_musgo: { color: m_pedra_musgo_diff, normal: m_pedra_musgo_nor, arh: m_pedra_musgo_arh },
+  telha_velha: { color: m_telha_velha_diff, normal: m_telha_velha_nor, arh: m_telha_velha_arh },
+  shingle_madeira: { color: m_shingle_madeira_diff, normal: m_shingle_madeira_nor, arh: m_shingle_madeira_arh },
+  palha: { color: m_palha_diff, normal: m_palha_nor, arh: m_palha_arh },
+  porta_madeira: { color: m_porta_madeira_diff, normal: m_porta_madeira_nor, arh: m_porta_madeira_arh },
+  ferro_velho: { color: m_ferro_velho_diff, normal: m_ferro_velho_nor, arh: m_ferro_velho_arh },
+  tecido_corda: { color: m_tecido_corda_diff, normal: m_tecido_corda_nor, arh: m_tecido_corda_arh },
 };
 
 export const BARK = {

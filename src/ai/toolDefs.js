@@ -124,10 +124,11 @@ export const TOOL_DEFS = [
   },
   {
     name: 'set_grass',
-    description: 'Configura a grama: preset (curta, alta, flor, campo, floresta, seco, e os novos), enabled, count (densidade), radius (distância), height, flowers (0-0.5), colorBase, colorTip.',
+    description: 'Configura a grama: preset (curta, alta, flor, campo, floresta, seco, pasto, trigo, juncos, trevo, alpina, outono, lavanda, pantano, capim_dourado), enabled, count (densidade), radius (distância), height, flowers (0-0.5), heads (espigas 0-1), colorBase, colorTip, layers (camadas do terreno onde nasce, 0-7).',
     input_schema: obj({
       preset: str('Tipo de folhagem'), enabled: bool('Ligar/desligar'), count: int('Quantidade de folhas'), radius: num('Distância de render'),
-      height: num('Altura'), flowers: num('Flores 0-0.5'), colorBase: str('#rrggbb'), colorTip: str('#rrggbb'),
+      height: num('Altura'), flowers: num('Flores 0-0.5'), heads: num('Espigas 0-1'), colorBase: str('#rrggbb'), colorTip: str('#rrggbb'),
+      layers: { type: 'array', items: { type: 'integer' }, description: 'Camadas onde a grama nasce (0 Grama, 1 Terra, 5 Lama...)' },
     }),
   },
   // ------------------------------------------------------------ objetos
@@ -170,6 +171,36 @@ export const TOOL_DEFS = [
     mutates: true,
     description: 'Muralha automática ligando os pontos (peças de 8 m), com torres nos cantos se towers=true. closed fecha o contorno.',
     input_schema: obj({ points: { type: 'array', items: point, minItems: 2, maxItems: 40 }, closed: bool('Fechar o contorno'), towers: bool('Torres nos cantos') }, ['points']),
+  },
+  // ------------------------------------------------------------ Construtor
+  {
+    name: 'build_structure',
+    mutates: true,
+    core: true,
+    description: 'Constrói pelo Construtor marcando pontos no chão (como o usuário faz clicando). type: casa (cantos; o 1º lado é a frente com a porta; 2 pontos = retângulo com params.width de fundo), castelo (cantos da muralha), muros (linha), torre (centro [e um ponto na borda para o raio]), portao (2 pontos), telhado (cantos, alpendre sobre pilares), ponte (2 margens). preset A (simples), B (rebocada), C (nobre). slots: material por parte (ids de list_things materials). Devolve o id da construção e o uid do objeto.',
+    input_schema: obj({
+      type: str('Tipo', { enum: ['casa', 'castelo', 'muros', 'torre', 'portao', 'telhado', 'ponte'] }),
+      points: { type: 'array', items: point, minItems: 1, maxItems: 24, description: 'Pontos [x, z] no mundo' },
+      preset: str('Acabamento', { enum: ['A', 'B', 'C'] }),
+      name: str('Nome'),
+      params: { type: 'object', description: 'floors, floorH, thick, width, height, roofType (duas|quatro|plano|ameias|cone), roofPitch, overhang, timber (nenhum|superior|todos), groundStone, postSpacing, windows, windowSpacing, door, shutters, chimney, crenels, towers, towerRadius, keep, closed, sides, arches, bridgeStyle (pedra|madeira), railing, collision, lod' },
+      slots: { type: 'object', description: 'parede, madeira, base, telhado, porta, ferro -> {mat, blend, tint, uv} ou só o id do material' },
+      weather: { type: 'object', description: 'colorVar, wear, moss, dirt, humidity, damage, grout, normal, parallax (0-1; normal e parallax até 2)' },
+    }, ['type', 'points']),
+  },
+  {
+    name: 'edit_structure',
+    mutates: true,
+    description: 'Muda uma construção existente (todas as cópias): id da construção (est_...) ou uid do objeto (obj_...). Aceita preset, name, params, slots e weather como em build_structure, e newSeed=true para outra variação.',
+    input_schema: obj({
+      id: str('id da construção ou uid do objeto'),
+      preset: str('A, B ou C', { enum: ['A', 'B', 'C'] }),
+      name: str('Nome'),
+      params: { type: 'object' },
+      slots: { type: 'object' },
+      weather: { type: 'object' },
+      newSeed: bool('Sortear outra variação'),
+    }, ['id']),
   },
   // ------------------------------------------------------------ NPCs e zonas
   {
@@ -229,7 +260,7 @@ export const TOOL_DEFS = [
   // ------------------------------------------------------------ editor
   {
     name: 'editor_action',
-    description: 'Ações do editor: undo, redo, save (baixa o .json), open_tab (arg = mundo, terreno, objetos, npc, personagens, construtor, materiais, roupa, loja, html, exportar), select (arg = uid), focus (arg = uid), validate.',
+    description: 'Ações do editor: undo, redo, save (baixa o .json), open_tab (arg = mundo, terreno, objetos, construtor, materiais, npc, personagens, roupa, loja, html, exportar), select (arg = uid), focus (arg = uid), validate.',
     input_schema: obj({ action: str('Ação', { enum: ['undo', 'redo', 'save', 'open_tab', 'select', 'focus', 'validate'] }), arg: str('Argumento') }, ['action']),
   },
   {
@@ -292,4 +323,5 @@ export const ASSISTANT_RULES = `Você é o assistente do EditorJogo, o editor de
 Você tem controle do editor pelas ferramentas. Antes de mudar algo grande, olhe o estado (get_overview, list_things, terrain_info, screenshot). Tudo que você muda vai para o histórico e o usuário pode desfazer com Ctrl+Z.
 Coordenadas: metros, Y para cima, terreno centrado na origem (x e z vão de -tamanho/2 a +tamanho/2). heading/yaw em graus.
 Ao montar cidades: ache uma área plana (terrain_info), nivele se preciso, coloque construções com espaço para ruas (caminho pintado), NPCs de serviço (Teleporter, Warehouse, Merchant com loja e página, Buffer, Guardas no portão), uma zona de paz cobrindo a cidade, muralha se fizer sentido, e natureza em volta. Monstros ficam fora das zonas de paz, em grupos com count/radius e level coerente com a distância da cidade.
+Casas, castelos, muros, torres, portões, telhados e pontes: use build_structure (é o Construtor, sem Blender) com preset A/B/C e materiais da biblioteca; para mudar depois, edit_structure. Casas de vila medieval: 2 andares, enxaimel, 6-10 m de frente.
 Quando pedirem para analisar o que falta, use analyze_world e program_info e responda em lista curta com prioridades. Seja honesto sobre o que o editor ainda não faz.`;

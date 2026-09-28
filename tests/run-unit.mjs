@@ -383,6 +383,104 @@ test('rig automático: acha as juntas como o Verdant Rig e os pesos somam 1', ()
   assert.ok(d.after <= 1200 && d.after > 1000, `${d.after}`);
 });
 
+// ---------------------------------------------------------------- materiais, Construtor e assistente
+test('biblioteca: separa os mapas de cada material pelos nomes (3 a 5 mapas)', async () => {
+  const { groupMaterialFiles, classifyMap, materialBaseName } = await import('../src/world/pbrNames.js');
+  const g = groupMaterialFiles(['Tijolos/Brick_2K_Color.jpg', 'Tijolos/Brick_2K_NormalGL.jpg', 'Tijolos/Brick_2K_NormalDX.jpg', 'Tijolos/Brick_2K_Roughness.jpg', 'Tijolos/Brick_2K_Displacement.jpg', 'Tijolos/Brick_2K_Metalness.jpg', 'Tijolos/Brick_2K_AmbientOcclusion.jpg', 'Tijolos/leia-me.txt']);
+  assert.equal(g.length, 1);
+  assert.equal(g[0].name, 'Tijolos');
+  assert.deepEqual(Object.keys(g[0].files).sort(), ['ao', 'color', 'height', 'metal', 'normal', 'normalDX', 'rough']);
+  assert.equal(g[0].files.normal, 'Tijolos/Brick_2K_NormalGL.jpg');
+  // uma pasta com dois materiais no padrão Unreal
+  const u = groupMaterialFiles(['Casa/T_Wall_D.png', 'Casa/T_Wall_N.png', 'Casa/T_Wall_ORM.png', 'Casa/T_Roof_D.png', 'Casa/T_Roof_N.png', 'Casa/T_Roof_H.png']);
+  assert.deepEqual(u.map((x) => x.name).sort(), ['roof', 'wall']);
+  assert.equal(u.find((x) => x.name === 'wall').files.normalDX, true);
+  assert.equal(classifyMap('rocks_disp_1k.png').kind, 'height');
+  assert.equal(classifyMap('telhado_altura.png').kind, 'height');
+  assert.equal(classifyMap('Parede_Cor.png').kind, 'color');
+  assert.equal(materialBaseName('Parede_Cor.png'), 'parede');
+});
+
+test('Construtor: todos os tipos geram geometria sem NaN, com partes e colisão', async () => {
+  const { generateStructure, newStructure, STRUCT_TYPES, PRESETS } = await import('../src/build/structure.js');
+  const cases = {
+    casa: [[0, 0], [8, 0], [8, 6], [0, 6]],
+    castelo: [[-20, -20], [20, -20], [25, 15], [-20, 20]],
+    muros: [[0, 0], [20, 0], [30, 10]],
+    torre: [[0, 0], [3, 0]],
+    portao: [[0, 0], [10, 0]],
+    telhado: [[0, 0], [6, 0], [6, 4], [0, 4]],
+    ponte: [[0, 0], [24, 0]],
+  };
+  assert.equal(STRUCT_TYPES.length, 7);
+  for (const [type, pts] of Object.entries(cases)) {
+    const def = newStructure(type, pts, { profile: type === 'ponte' ? [0, -1, -3, -4, -3, -1, 0] : null, seed: 5 });
+    const r = generateStructure(def);
+    let tris = 0;
+    for (const [, g] of r.geos) {
+      tris += g.index.count / 3;
+      for (const v of g.attributes.position.array) assert.ok(Number.isFinite(v), `${type}: posição inválida`);
+      for (const v of g.attributes.uv.array) assert.ok(Number.isFinite(v), `${type}: UV inválida`);
+    }
+    assert.ok(tris > 100, `${type}: ${tris} triângulos`);
+    if (!['telhado', 'ponte'].includes(type)) assert.ok(r.colliders.length > 0, `${type} sem colisão`);
+    if (type === 'ponte') assert.ok(r.deck && r.deck.w === def.params.width);
+    for (const g of r.geos.values()) g.dispose();
+  }
+  // casa: a porta fica no 1º lado clicado e o preset B mistura reboco com tijolo
+  const casa = newStructure('casa', [[0, 0], [8, 0], [8, 6], [0, 6]]);
+  const r = generateStructure(casa);
+  for (const slot of ['parede', 'madeira', 'base', 'telhado', 'porta', 'ferro', 'vidro']) assert.ok(r.geos.has(slot), slot);
+  const door = r.geos.get('porta');
+  door.computeBoundingBox();
+  assert.ok(door.boundingBox.min.z < 0.6, 'porta na frente (z = 0)');
+  assert.equal(PRESETS.B.slots.parede.blend, 'tijolo_velho');
+});
+
+test('Construtor: faces para fora (caixa e prisma)', async () => {
+  const THREE = await import('three');
+  const { GeoAcc, ccwXZ } = await import('../src/build/geom.js');
+  const acc = new GeoAcc();
+  acc.prism('a', ccwXZ([[1, 1], [-1, 1], [-1, -1], [1, -1]]), 0, 2);
+  acc.box('b', 0, 0, 0, 2, 1, 1, new THREE.Vector3(1, 0, 1));
+  for (const [k, g] of acc.build()) {
+    const p = g.attributes.position, idx = g.index.array;
+    const center = k === 'a' ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3();
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = new THREE.Vector3().fromBufferAttribute(p, idx[i]), b = new THREE.Vector3().fromBufferAttribute(p, idx[i + 1]), c = new THREE.Vector3().fromBufferAttribute(p, idx[i + 2]);
+      const n = b.clone().sub(a).cross(c.clone().sub(a));
+      assert.ok(n.dot(a.clone().add(b).add(c).divideScalar(3).sub(center)) > 0, `${k}: triângulo virado para dentro`);
+    }
+  }
+});
+
+test('malhas: cada modelo leva as texturas da própria pasta', async () => {
+  const { groupModelFiles } = await import('../src/city/meshImport.js');
+  const e = (name) => ({ name, bytes: new Uint8Array(1) });
+  const g = groupModelFiles([e('casa/casa.obj'), e('casa/casa.mtl'), e('casa/tex/parede_color.png'), e('torre/torre.gltf'), e('torre/torre.bin'), e('torre/pedra.jpg')]);
+  assert.equal(g.length, 2);
+  assert.deepEqual(g[0].resources.map((r) => r.name), ['casa/casa.mtl', 'casa/tex/parede_color.png']);
+  assert.deepEqual(g[1].resources.map((r) => r.name), ['torre/torre.bin', 'torre/pedra.jpg']);
+});
+
+test('assistente: esquemas das ferramentas e validação das entradas', async () => {
+  const { TOOL_DEFS, TOOL_MAP, validateInput } = await import('../src/ai/toolDefs.js');
+  const names = new Set();
+  for (const t of TOOL_DEFS) {
+    assert.match(t.name, /^[a-z_]{3,40}$/);
+    assert.ok(!names.has(t.name), t.name);
+    names.add(t.name);
+    assert.ok(t.description.length > 20 && t.description.length <= 1000, t.name);
+    assert.equal(t.input_schema.type, 'object');
+    assert.ok(JSON.stringify(t.input_schema).length <= 4096, t.name);
+  }
+  const place = TOOL_MAP.get('place_objects').input_schema;
+  assert.equal(validateInput(place, { items: [{ ref: 'casa', x: 1, z: 2 }] }), null);
+  assert.match(validateInput(place, { items: [{ ref: 'casa', x: '1', z: 2 }] }), /x deveria ser number/);
+  assert.match(validateInput(place, {}), /items é obrigatório/);
+  assert.match(validateInput(TOOL_MAP.get('add_npcs').input_schema, { items: [{ type: 'Chefe', x: 0, z: 0 }] }), /deve ser um de/);
+});
+
 for (const t of tests) {
   try {
     await t.fn();

@@ -23,7 +23,32 @@ https://polyhaven.com — pode usar em jogo comercial, sem precisar dar crédito
 | building/roof_tiles_* | clay_roof_tiles_02 |
 | building/roof_slates_* | roof_slates_02 |
 
-Sufixos: `diff` = cor, `nor` = normal (padrão OpenGL), `arm` = R oclusão, G rugosidade, B metal.
+| material/tijolo_novo_* | red_brick_03 |
+| material/tijolo_velho_* | medieval_red_brick |
+| material/tijolo_rebocado_* | red_brick_plaster_patch_02 |
+| material/reboco_quebrado_* | damaged_plaster |
+| material/reboco_musgo_* | worn_mossy_plasterwall |
+| material/taipa_* | clay_plaster |
+| material/madeira_escura_* | dark_planks |
+| material/madeira_clara_* | rough_wood |
+| material/madeira_velha_* | weathered_planks |
+| material/madeira_rachada_* | wooden_planks |
+| material/madeira_umida_* | moss_wood |
+| material/toras_* | wood_trunk_wall |
+| material/pedra_bruta_* | rustic_stone_wall |
+| material/pedra_talhada_* | stone_block_wall |
+| material/alvenaria_pesada_* | castle_brick_07 |
+| material/bloco_antigo_* | medieval_blocks_02 |
+| material/pedra_musgo_* | mossy_stone_wall |
+| material/telha_velha_* | roof_tiles_14 |
+| material/shingle_madeira_* | weathered_plank_siding |
+| material/palha_* | thatch_roof_angled |
+| material/porta_madeira_* | rough_pine_door |
+| material/ferro_velho_* | rusty_metal_02 |
+| material/tecido_corda_* | hessian_230 |
+
+Sufixos: `diff` = cor, `nor` = normal (padrão OpenGL). `arm` do terreno = R oclusão, G rugosidade, B metal;
+`arm` das construções e `arh` dos materiais = R oclusão, G rugosidade, **B altura** (para o relevo/parallax do Construtor).
 
 ## Árvores — ez-tree (MIT)
 

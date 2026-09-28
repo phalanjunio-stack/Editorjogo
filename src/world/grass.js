@@ -22,6 +22,11 @@ uniform vec3 uColorTip;
 uniform float uFlowers;
 uniform vec3 uFlowerA;
 uniform vec3 uFlowerB;
+uniform float uHeads;
+uniform vec4 uMaskA;
+uniform vec4 uMaskB;
+uniform vec3 uHeadColor;
+uniform float uStiff;
 uniform vec3 uSunDir;
 uniform vec3 uSunColor;
 uniform vec3 uAmbient;
@@ -51,7 +56,7 @@ void main() {
   float inside = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
   vec4 sa = texture(uSplatA, uv);
   vec4 sb = texture(uSplatB, uv);
-  float gw = sa.r / max(sa.r + sa.g + sa.b + sa.a + sb.r + sb.g + sb.b + sb.a, 1e-3);
+  float gw = (dot(sa, uMaskA) + dot(sb, uMaskB)) / max(sa.r + sa.g + sa.b + sa.a + sb.r + sb.g + sb.b + sb.a, 1e-3);
   float h = heightAt(wp);
   float keep = step(aRnd.x, gw * 1.15 - 0.1) * inside * step(uWaterLevel + 0.15, h);
   float scale = keep * fade;
@@ -60,16 +65,19 @@ void main() {
   float ang = aRnd.z * 6.2831853;
   vec2 side = vec2(cos(ang), sin(ang));
   float flower = step(fract(aRnd.w * 7.31 + aRnd.x * 3.7), uFlowers);
-  float bladeH = uBladeH * mix(0.55, 1.35, aRnd.y) * scale * (1.0 + flower * 0.25);
+  // pendão/espiga (trigo, juncos): cabeça alongada no alto da folha
+  float head = step(fract(aRnd.w * 5.13 + aRnd.y * 2.31), uHeads) * (1.0 - flower);
+  float bladeH = uBladeH * mix(0.55, 1.35, aRnd.y) * scale * (1.0 + flower * 0.25 + head * 0.12);
 
   // vento: rajadas lentas + tremor rápido
   float phase = dot(wp, uWindDir);
   float gust = sin(uTime * 0.9 - phase * 0.08) * 0.5 + 0.5;
   float flutter = sin(uTime * 3.1 - phase * 0.6 + aRnd.w * 6.28) * 0.5 + 0.5;
-  float bend = (uWind * (0.25 + 0.75 * gust) * (0.6 + 0.4 * flutter) + 0.12 * (aRnd.w - 0.5)) * t * t;
+  float bend = (uWind * (0.25 + 0.75 * gust) * (0.6 + 0.4 * flutter) + 0.12 * (aRnd.w - 0.5)) * t * t * (1.0 - uStiff * 0.7);
 
   vec3 pos;
-  float headW = 1.0 + flower * 2.2 * smoothstep(0.55, 0.75, t) * (1.0 - smoothstep(0.85, 1.0, t));
+  float headW = 1.0 + flower * 2.2 * smoothstep(0.55, 0.75, t) * (1.0 - smoothstep(0.85, 1.0, t))
+    + head * 1.6 * smoothstep(0.62, 0.72, t) * (1.0 - smoothstep(0.92, 1.0, t));
   pos.xz = wp + side * position.x * uBladeW * headW * (0.4 + scale * 0.6) + uWindDir * bend * bladeH;
   pos.y = h + t * bladeH * (1.0 - 0.35 * bend * bend) - 0.03;
 
@@ -78,6 +86,7 @@ void main() {
   vec3 albedo = mix(base, tip, t);
   vec3 petal = mix(uFlowerA, uFlowerB, step(0.5, fract(aRnd.z * 13.7)));
   albedo = mix(albedo, petal * 1.1, flower * smoothstep(0.62, 0.9, t));
+  albedo = mix(albedo, uHeadColor * mix(0.8, 1.1, aRnd.z), head * smoothstep(0.6, 0.72, t));
   float sunUp = clamp(uSunDir.y * 1.5, 0.0, 1.0);
   float light = mix(0.45, 1.0, t) * (0.55 + 0.45 * sunUp);
   vColor = albedo * (uAmbient + uSunColor * light);
@@ -126,6 +135,11 @@ export class Grass {
         uFlowers: { value: 0 },
         uFlowerA: { value: new THREE.Color() },
         uFlowerB: { value: new THREE.Color() },
+        uHeads: { value: 0 },
+        uMaskA: { value: new THREE.Vector4(1, 0, 0, 0) },
+        uMaskB: { value: new THREE.Vector4(0, 0, 0, 0) },
+        uHeadColor: { value: new THREE.Color('#d9b35a') },
+        uStiff: { value: 0 },
         uRes: { value: 2 },
         uSize: { value: 512 },
         uRadius: { value: 45 },
@@ -205,6 +219,13 @@ export class Grass {
     this.uniforms.uFlowers.value = g.flowers ?? 0;
     this.uniforms.uFlowerA.value.set(g.flowerA || '#ffffff');
     this.uniforms.uFlowerB.value.set(g.flowerB || '#ffffff');
+    this.uniforms.uHeads.value = g.heads || 0;
+    this.uniforms.uHeadColor.value.set(g.headColor || '#d9b35a');
+    this.uniforms.uStiff.value = g.stiff || 0;
+    // em quais camadas do terreno a grama nasce (padrão: só na Grama)
+    const on = (i) => ((g.layers || [0]).includes(i) ? 1 : 0);
+    this.uniforms.uMaskA.value.set(on(0), on(1), on(2), on(3));
+    this.uniforms.uMaskB.value.set(on(4), on(5), on(6), on(7));
     if (this.mesh) this.mesh.visible = g.enabled;
   }
 

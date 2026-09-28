@@ -67,7 +67,7 @@ export function withTerrainUndo(app, label, fn) {
 
 export function applyFoliagePreset(app, p) {
   const g = app.project.grass;
-  Object.assign(g, { preset: p.id, height: p.height, width: p.width, colorBase: p.colorBase, colorTip: p.colorTip, flowers: p.flowers, flowerA: p.flowerA, flowerB: p.flowerB, enabled: true });
+  Object.assign(g, { preset: p.id, height: p.height, width: p.width, colorBase: p.colorBase, colorTip: p.colorTip, flowers: p.flowers, flowerA: p.flowerA, flowerB: p.flowerB, heads: p.heads || 0, headColor: p.headColor || '#d9b35a', stiff: p.stiff || 0, enabled: true });
   app.grass.applySettings(g);
   app.applyShow();
   app.markDirty();
@@ -136,7 +136,21 @@ export const terrenoMode = {
       applyFoliagePreset(app, FOLIAGE_PRESETS.find((p) => p.id === id));
       app.refreshPanels();
     }, { cols: 3 });
-    hint(gr, 'A grama nasce onde a camada Grama está pintada.');
+    gr.append(el('div', { class: 'sub-title' }, 'Nasce nas camadas'));
+    const lays = el('div', { class: 'layer-checks' });
+    app.project.terrain.layers.forEach((l, i) => {
+      const cb = el('input', { type: 'checkbox' });
+      cb.checked = (g.layers || [0]).includes(i);
+      cb.addEventListener('change', () => {
+        const set = new Set(g.layers || [0]);
+        if (cb.checked) set.add(i); else set.delete(i);
+        g.layers = [...set].sort();
+        applyGrass();
+      });
+      lays.append(el('label', { class: 'check-row' }, cb, el('span', {}, l.name)));
+    });
+    gr.append(lays);
+    hint(gr, 'A grama nasce onde as camadas marcadas estão pintadas (ex.: juncos na Lama, capim na Terra).');
 
     const gen = section(root, 'Configurações do Terreno', { icon: 'sliders', open: false });
     select(gen, 'Gerar', st.gen, 'kind', [

@@ -9,6 +9,11 @@ import { FOLIAGE_PRESETS } from '../core/state.js';
 import { validateProject } from '../l2/serverExport.js';
 import { newMultisell, newEntry } from '../l2/multisell.js';
 import { uid, clamp, DEG, editorToL2 } from '../core/util.js';
+import { structureDefAt, applyPreset } from '../modes/construtor.js';
+import { STRUCT_TYPE_MAP, newStructure } from '../build/structure.js';
+import { importMaterials } from '../modes/materiais.js';
+import { objetosMode } from '../modes/cityModes.js';
+import { base64ToBytes } from '../core/util.js';
 
 const r2 = (v) => Math.round(v * 100) / 100;
 const MAX_RESULT = 30000;
@@ -184,8 +189,8 @@ export function analyzeWorld(app) {
 export const PROGRAM_INFO = {
   abas: {
     Mundo: 'hora do dia, sol, nuvens, névoa, vento, água',
-    Terreno: 'gerar relevo, esculpir (elevar, abaixar, suavizar, nivelar, ruído, erosão, caminho), 8 camadas PBR, heightmap, grama e folhagem',
-    Objetos: 'peças prontas, malhas GLB/FBX/OBJ, muralha automática, espalhar natureza, gizmo',
+    Terreno: 'gerar relevo, esculpir (elevar, abaixar, suavizar, nivelar, ruído, erosão, caminho), 8 camadas PBR, heightmap, 15 tipos de grama/folhagem (trigo, juncos, lavanda...) escolhendo em quais camadas nasce',
+    Objetos: 'peças prontas, malhas GLB/GLTF/FBX/OBJ com as texturas da pasta (ligadas pelo nome), muralha automática, espalhar natureza, gizmo',
     Construtor: 'casas, castelo, muros, torre, portão, telhado e ponte marcando os cantos no chão; materiais por parte, presets A/B/C, desgaste, musgo, sujeira, umidade; vira malha GLB',
     Materiais: 'biblioteca PBR (cor, normal, rugosidade, AO, altura, metal) por categoria: tijolo, madeira, pedra, telhado, decalques; importa pasta ou .zip pelos nomes',
     NPC: 'spawns com level/HP/MP, IA, drops, página, loja; zonas de paz/cidade/arena',
@@ -435,7 +440,7 @@ export class AssistantTools {
       if (!p) throw new Error(`Tipo de grama "${i.preset}" não existe. Tipos: ${FOLIAGE_PRESETS.map((x) => x.id).join(', ')}`);
       applyFoliagePreset(app, p);
     }
-    for (const k of ['enabled', 'count', 'radius', 'height', 'flowers', 'colorBase', 'colorTip']) if (i[k] !== undefined) g[k] = i[k];
+    for (const k of ['enabled', 'count', 'radius', 'height', 'flowers', 'heads', 'colorBase', 'colorTip', 'layers']) if (i[k] !== undefined) g[k] = i[k];
     g.count = clamp(g.count, 10000, 400000);
     g.radius = clamp(g.radius, 15, 150);
     app.grass.applySettings(g);
@@ -521,6 +526,92 @@ export class AssistantTools {
     const ok = c.finishWall();
     Object.assign(c.opts, { wallClosed: prev.closed, wallTowers: prev.towers });
     return { ok, pecas: c.project.objects.length - before };
+  }
+
+  // ------------------------------------------------------------ Construtor
+  _applyStructOpts(def, i) {
+    const lib = this.app.materials;
+    if (i.preset) applyPreset(def, i.preset);
+    if (i.name) def.name = String(i.name);
+    if (i.params) for (const [k, v] of Object.entries(i.params)) if (k in def.params) def.params[k] = v;
+    if (i.slots) {
+      for (const [slot, v] of Object.entries(i.slots)) {
+        const val = typeof v === 'string' ? { mat: v } : { ...v };
+        for (const key of ['mat', 'blend']) if (val[key] && !lib.get(val[key])) throw new Error(`Material "${val[key]}" não existe. Veja list_things materials.`);
+        def.slots[slot] = { uv: 1, ...(def.slots[slot] || {}), ...val };
+      }
+    }
+    if (i.weather) for (const [k, v] of Object.entries(i.weather)) if (k in def.weather || ['damage', 'normal', 'parallax'].includes(k)) def.weather[k] = Number(v);
+  }
+
+  _build_structure(i) {
+    const app = this.app, c = app.city;
+    const t = STRUCT_TYPE_MAP.get(i.type);
+    if (!t) throw new Error('Tipo desconhecido');
+    const pts = i.points;
+    if (pts.length < (t.pick === 'center' ? 1 : t.min)) throw new Error(`${t.label} precisa de pelo menos ${t.min} ponto(s).`);
+    if (t.pick === 'two' && pts.length !== 2) throw new Error(`${t.label} usa exatamente 2 pontos.`);
+    for (const [x, z] of pts) if (!this.T.inside(x, z)) throw new Error(`O ponto [${x}, ${z}] está fora do terreno.`);
+    const base = newStructure(i.type, []);
+    this._applyStructOpts(base, { ...i, name: undefined });
+    const { def, pos } = structureDefAt(app, i.type, t.pick === 'center' ? pts.slice(0, 2) : pts, base);
+    if (i.name) def.name = String(i.name);
+    const o = c.commit(`Assistente: construir ${def.name}`, () => {
+      (app.project.structures ||= []).push(def);
+      return c.addObject(`struct:${def.id}`, pos);
+    });
+    const tpl = c.structTemplates.get(def.id);
+    return { ok: true, id: def.id, uid: o.uid, name: def.name, altura: Math.round((tpl?.height || 0) * 10) / 10, posicao: [pos.x, pos.y, pos.z].map((v) => Math.round(v * 100) / 100) };
+  }
+
+  _edit_structure(i) {
+    const app = this.app, c = app.city;
+    const p = app.project;
+    const obj = p.objects.find((o) => o.uid === i.id && o.kind === 'struct');
+    const def = (p.structures || []).find((d) => d.id === (obj ? obj.ref : i.id));
+    if (!def) throw new Error(`Construção "${i.id}" não existe. Veja list_things structures.`);
+    c.commit(`Assistente: editar ${def.name}`, () => {
+      this._applyStructOpts(def, i);
+      if (i.newSeed) def.seed = Math.floor(Math.random() * 100000);
+      if (i.name) for (const o of p.objects) if (o.kind === 'struct' && o.ref === def.id) o.name = def.name;
+      def.rev = (def.rev || 0) + 1;
+      c.refreshStructure(def.id);
+    });
+    return { ok: true, id: def.id, params: def.params, slots: def.slots, weather: def.weather };
+  }
+
+  // ------------------------------------------------------------ importar (pela ponte do Claude Code)
+  async _import_files({ files, kind = 'auto', name, category }) {
+    const app = this.app;
+    const entries = files.map((f) => ({ name: f.name, bytes: base64ToBytes(f.data) }));
+    const ext = (e) => e.name.split('.').pop().toLowerCase();
+    let k = kind;
+    if (k === 'auto') {
+      const exts = new Set(entries.map(ext));
+      if (exts.has('psk')) k = 'character';
+      else if (exts.has('psa')) k = 'animations';
+      else if (['glb', 'gltf', 'fbx', 'obj'].some((x) => exts.has(x))) k = 'mesh';
+      else k = 'material';
+    }
+    if (k === 'material') {
+      const made = await importMaterials(app, entries, { category: category || null, name });
+      return { ok: true, tipo: 'material', materiais: made.map((m) => ({ id: m.id, name: m.name, category: m.category, mapas: m.found })) };
+    }
+    if (k === 'mesh') {
+      if (!objetosMode.app) objetosMode.app = app;
+      const made = await objetosMode.importMeshEntries(entries, { scale: 1 });
+      return { ok: true, tipo: 'malha', malhas: made.map((m) => ({ ref: `mesh:${m.id}`, name: m.name, texturas: Object.keys(m.files || {}).length, ligadas: m.linked })) };
+    }
+    if (k === 'character') {
+      const r = await app.characters.importFiles(entries);
+      if (r?.needsRig) return { ok: true, tipo: 'personagem', nota: 'Modelo sem esqueleto: abra a aba Rig e use "Rig automático".' };
+      return { ok: true, tipo: 'personagem', id: r?.def?.id, name: r?.def?.name };
+    }
+    if (k === 'animations') {
+      const r = await app.characters.importPack(entries, { keep: true });
+      return { ok: true, tipo: 'animacoes', pacote: r?.def?.name, id: r?.def?.id, clipes: r?.clips?.map((c) => c.name) };
+    }
+    throw new Error('Tipo de importação desconhecido');
   }
 
   // ------------------------------------------------------------ NPCs e zonas

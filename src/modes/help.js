@@ -16,6 +16,7 @@ const KEYS = [
   ['Objetos/NPC: Delete, Ctrl+D, End, F', 'Apagar, duplicar, grudar no chão, focar'],
   ['Objetos: [ e ]', 'Girar peça 15°'],
   ['Muralha/Zona: Enter, Esc, Backspace', 'Terminar, cancelar, desfazer ponto'],
+  ['Construir: clique nos cantos, Enter', 'Termina a construção (duplo clique também); Backspace desfaz o ponto'],
 ];
 
 export function showHelp() {
@@ -28,11 +29,14 @@ export function showHelp() {
         el('li', {}, el('b', {}, 'Terreno: '), 'gere montanhas (ou importe um heightmap), esculpa, use Erosão e Caminho, pinte as 8 camadas e escolha o tipo de folhagem (grama com flores que balança no vento).'),
         el('li', {}, el('b', {}, 'Mundo: '), 'hora do dia, sol, nuvens, névoa, vento e água.'),
         el('li', {}, el('b', {}, 'Objetos: '), 'escolha a peça no Navegador de Conteúdo (embaixo) e clique no chão, como no UnrealEd do L2. Muralha automática, espalhar árvores e importar suas malhas GLB/FBX/OBJ.'),
+        el('li', {}, el('b', {}, 'Construir: '), 'casas, castelo, muros, torre, portão, telhado e ponte clicando nos cantos no chão; material por parte, presets A/B/C e envelhecimento (musgo, sujeira, umidade, reboco caindo).'),
+        el('li', {}, el('b', {}, 'Materiais: '), 'biblioteca PBR com esferas; importe pastas ou .zip de texturas (cor, normal, rugosidade, AO, altura, metal).'),
         el('li', {}, el('b', {}, 'NPC: '), 'coloque NPCs (viram spawns do servidor), edite Level/HP/MP, IA, drops, HTML e loja; desenhe zonas de paz, cidade e PvP.'),
         el('li', {}, el('b', {}, 'Roupa: '), 'capas, mantos e bandeiras com física de tecido num boneco andando (ou no seu personagem GLB/FBX).'),
         el('li', {}, el('b', {}, 'Loja e HTML: '), 'multisells e diálogos com prévia no estilo do jogo.'),
         el('li', {}, el('b', {}, 'Play (F5): '), 'ande pelo mapa com a capa e converse com os NPCs para testar tudo.'),
         el('li', {}, el('b', {}, 'Exportar: '), 'pacote com os arquivos do servidor (L2J/L2Mobius) e validação do projeto.'),
+        el('li', {}, el('b', {}, 'Claude: '), 'o botão no alto abre o assistente: peça em português e ele monta no editor e diz o que falta no mundo e no programa.'),
       ),
       el('h3', {}, 'Atalhos'),
       el('table', { class: 'keys' }, ...KEYS.map(([k, v]) => el('tr', {}, el('td', {}, el('kbd', {}, k)), el('td', {}, v)))),

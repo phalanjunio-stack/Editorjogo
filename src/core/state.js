@@ -35,6 +35,16 @@ export const FOLIAGE_PRESETS = [
   { id: 'campo', name: 'Campo Florido', height: 0.6, width: 0.07, colorBase: '#2a4d1b', colorTip: '#a4c75e', flowers: 0.3, flowerA: '#f2cf3c', flowerB: '#d8403a' },
   { id: 'floresta', name: 'Grama de Floresta', height: 0.5, width: 0.08, colorBase: '#16300f', colorTip: '#4f7d2c', flowers: 0.03, flowerA: '#dfe8f5', flowerB: '#7fa3e8' },
   { id: 'seco', name: 'Capim Seco', height: 0.8, width: 0.05, colorBase: '#5a5528', colorTip: '#d8c27a', flowers: 0, flowerA: '#f3efe4', flowerB: '#f2d04a' },
+  // tipos novos: pendão (espiga) e rigidez no vento
+  { id: 'pasto', name: 'Pasto Verde', height: 0.32, width: 0.09, colorBase: '#2d5a1c', colorTip: '#8cc152', flowers: 0.01, flowerA: '#ffffff', flowerB: '#f2d04a' },
+  { id: 'trigo', name: 'Trigo (campo de cultivo)', height: 1.05, width: 0.045, colorBase: '#6b5a22', colorTip: '#dcbc62', flowers: 0, flowerA: '#ffffff', flowerB: '#ffffff', heads: 0.85, headColor: '#d9b35a', stiff: 0.3 },
+  { id: 'juncos', name: 'Juncos (beira d\'água)', height: 1.6, width: 0.04, colorBase: '#2e3f1a', colorTip: '#6f8a3a', flowers: 0, flowerA: '#ffffff', flowerB: '#ffffff', heads: 0.22, headColor: '#4a2e1a', stiff: 0.55 },
+  { id: 'trevo', name: 'Trevo e Grama Baixa', height: 0.2, width: 0.15, colorBase: '#1f4a17', colorTip: '#4f9a3a', flowers: 0.08, flowerA: '#f6f4ee', flowerB: '#e6a0c8' },
+  { id: 'alpina', name: 'Grama Alpina', height: 0.28, width: 0.05, colorBase: '#3a4a2a', colorTip: '#9aa66a', flowers: 0.12, flowerA: '#f2d04a', flowerB: '#8a6ad6' },
+  { id: 'outono', name: 'Grama de Outono', height: 0.55, width: 0.065, colorBase: '#4a3a1a', colorTip: '#c07a2a', flowers: 0.02, flowerA: '#d8403a', flowerB: '#f2cf3c' },
+  { id: 'lavanda', name: 'Campo de Lavanda', height: 0.7, width: 0.05, colorBase: '#2d4a24', colorTip: '#6f8f4a', flowers: 0.55, flowerA: '#8a6ad0', flowerB: '#a88ae0' },
+  { id: 'pantano', name: 'Grama de Pântano', height: 0.4, width: 0.1, colorBase: '#1a2e0e', colorTip: '#58702a', flowers: 0, flowerA: '#ffffff', flowerB: '#ffffff', heads: 0.05, headColor: '#5a4a2a', stiff: 0.2 },
+  { id: 'capim_dourado', name: 'Capim Dourado', height: 0.9, width: 0.04, colorBase: '#6a5a24', colorTip: '#f0d88a', flowers: 0, flowerA: '#ffffff', flowerB: '#ffffff', heads: 0.35, headColor: '#f4e2a8', stiff: 0.1 },
 ];
 
 export function defaultClothPreset() {
@@ -118,6 +128,10 @@ export function defaultProject() {
       flowers: 0.12,
       flowerA: '#f4f1e6',
       flowerB: '#9a6ad6',
+      heads: 0,
+      headColor: '#d9b35a',
+      stiff: 0,
+      layers: [0], // camadas do terreno onde a grama nasce
     },
     objects: [], // { uid, kind:'prefab'|'mesh', ref, name, pos:[x,y,z], rot:[x,y,z], scale:[x,y,z], color, seed }
     npcs: [], // { uid, npcId, name, title, type, pos:[x,y,z], heading, respawn, html, multisell, count, radius }
@@ -130,6 +144,8 @@ export function defaultProject() {
     characters: [], // personagens: { id, name, kind:'padrao'|'importado', height, colors, glb(base64), slots:{parado:'clipe'...} }
     animPacks: [], // pacotes de animação guardados: { id, name, files:[{name, data(base64)}] }
     player: { character: null }, // personagem do modo Play (null = boneco de teste)
+    materials: [], // materiais PBR importados: { id, name, category, tile, tint, roughness, metalness, normalScale, depth, hasHeight, maps:{color, normal, arh} }
+    structures: [], // construções do Construtor: { id, name, type, points, params, slots, weather, seed }
   };
 }
 
@@ -146,7 +162,7 @@ export function normalizeProject(p) {
   out.grass = { ...d.grass, ...(p.grass || {}) };
   out.cloth = { current: { ...defaultClothPreset(), ...((p.cloth && p.cloth.current) || {}) }, presets: (p.cloth && p.cloth.presets) || [] };
   out.player = { ...d.player, ...(p.player || {}) };
-  for (const k of ['objects', 'npcs', 'zones', 'customMeshes', 'multisells', 'htmls', 'items', 'characters', 'animPacks']) {
+  for (const k of ['objects', 'npcs', 'zones', 'customMeshes', 'multisells', 'htmls', 'items', 'characters', 'animPacks', 'materials', 'structures']) {
     if (!Array.isArray(out[k])) out[k] = [];
   }
   out.npcs = out.npcs.map((n) => ({ ...npcDefaults(n.type), character: null, ...n }));

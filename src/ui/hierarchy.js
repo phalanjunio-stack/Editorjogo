@@ -26,7 +26,7 @@ export class Hierarchy {
     const A = this.actions;
     const sel = app.city.selected;
     const objLeaf = (o) => ({ id: o.uid, label: o.name, icon: 'cube', selected: sel?.uid === o.uid, onClick: () => A.selectObject('object', o.uid) });
-    const byCat = (cats) => p.objects.filter((o) => cats.includes(o.kind === 'mesh' ? 'Minhas malhas' : PREFAB_MAP.get(o.ref)?.cat));
+    const byCat = (cats) => p.objects.filter((o) => cats.includes(o.kind === 'mesh' ? 'Minhas malhas' : o.kind === 'struct' ? 'Construções' : PREFAB_MAP.get(o.ref)?.cat));
     const natural = byCat(['Natureza']);
     const trees = natural.filter((o) => o.ref === 'arvore' || o.ref === 'pinheiro');
     const others = natural.filter((o) => o.ref !== 'arvore' && o.ref !== 'pinheiro');
@@ -101,7 +101,7 @@ export class Hierarchy {
     const o = p.objects.find((x) => x.uid === uid);
     if (o) {
       this.expanded.add('mundo');
-      const cat = o.kind === 'mesh' ? 'malhas' : { Construções: 'construcoes', Muralhas: 'muralhas', Decoração: 'decoracao', Natureza: 'folhagem' }[PREFAB_MAP.get(o.ref)?.cat];
+      const cat = o.kind === 'mesh' ? 'malhas' : o.kind === 'struct' ? 'construcoes' : { Construções: 'construcoes', Muralhas: 'muralhas', Decoração: 'decoracao', Natureza: 'folhagem' }[PREFAB_MAP.get(o.ref)?.cat];
       if (cat) this.expanded.add(cat);
       if (cat === 'folhagem') this.expanded.add(o.ref === 'arvore' || o.ref === 'pinheiro' ? 'arvores' : 'pedras');
     }

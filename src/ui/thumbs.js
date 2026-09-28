@@ -26,11 +26,11 @@ export class ThumbRenderer {
   }
 
   // Retorna a URL se já existir; senão agenda e chama cb quando ficar pronta.
-  get(key, build, cb) {
+  get(key, build, cb, size = SIZE) {
     if (this.cache.has(key)) return this.cache.get(key);
     if (!this.listeners.has(key)) {
       this.listeners.set(key, []);
-      this.queue.push({ key, build });
+      this.queue.push({ key, build, size });
     }
     if (cb) this.listeners.get(key).push(cb);
     return null;
@@ -38,6 +38,29 @@ export class ThumbRenderer {
 
   prefab(id, cb) {
     return this.get(`prefab:${id}`, () => buildPrefab(id, null, 7), cb);
+  }
+
+  /** Esfera com o material da biblioteca (aba Materiais e Construtor). */
+  material(id, cb, size = SIZE, weather) {
+    const m = this.app.materials.get(id);
+    const key = `mat:${id}:${m?.rev || 0}:${size}:${weather ? JSON.stringify(weather) : ''}`;
+    return this.get(key, () => {
+      const o = this.app.materials.previewObject(id, weather);
+      o.userData.sphere = true;
+      return o;
+    }, cb, size);
+  }
+
+  structure(id, cb) {
+    const st = (this.app.project.structures || []).find((x) => x.id === id);
+    return this.get(`struct:${id}:${st?.rev || 0}`, () => {
+      const g = this.app.city.structureTemplate?.(id);
+      return g ? g.clone(true) : new THREE.Group();
+    }, cb);
+  }
+
+  forget(prefix) {
+    for (const k of [...this.cache.keys()]) if (k.startsWith(prefix)) this.cache.delete(k);
   }
 
   mesh(id, cb) {
@@ -58,7 +81,7 @@ export class ThumbRenderer {
       try {
         job.obj ??= job.build();
         if (texturesPending()) return; // a peça acabou de pedir texturas: fotografa depois
-        url = this._render(r, job.obj);
+        url = this._render(r, job.obj, job.size);
       } catch (err) {
         console.warn('miniatura', job.key, err);
       }
@@ -69,18 +92,22 @@ export class ThumbRenderer {
     }
   }
 
-  _render(renderer, obj) {
-    if (!this.rt) this.rt = new THREE.WebGLRenderTarget(SIZE, SIZE, { samples: 4, colorSpace: THREE.SRGBColorSpace });
+  _render(renderer, obj, res = SIZE) {
+    this.rts ||= new Map();
+    if (!this.rts.has(res)) this.rts.set(res, new THREE.WebGLRenderTarget(res, res, { samples: 4, colorSpace: THREE.SRGBColorSpace }));
+    const rt = this.rts.get(res);
+    const SIZE_ = res;
     this.scene.add(obj);
+    this.ground.visible = !obj.userData.sphere;
     obj.updateMatrixWorld(true);
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
     const center = box.getCenter(new THREE.Vector3());
-    const radius = Math.max(size.x, size.y, size.z) * 0.62 || 1;
+    const radius = obj.userData.sphere ? 0.56 : Math.max(size.x, size.y, size.z) * 0.62 || 1;
     this.ground.scale.setScalar(radius * 1.6);
     this.ground.position.set(center.x, box.min.y, center.z);
     const dist = radius / Math.tan((this.camera.fov * Math.PI) / 360);
-    const dir = new THREE.Vector3(0.9, 0.62, 1.05).normalize();
+    const dir = obj.userData.sphere ? new THREE.Vector3(0.25, 0.3, 1).normalize() : new THREE.Vector3(0.9, 0.62, 1.05).normalize();
     this.camera.position.copy(center).addScaledVector(dir, dist);
     this.camera.near = dist / 50;
     this.camera.far = dist * 5;
@@ -92,22 +119,23 @@ export class ThumbRenderer {
     const prevShadow = renderer.shadowMap.enabled;
     renderer.shadowMap.enabled = false;
     renderer.toneMappingExposure = 0.9;
-    renderer.setRenderTarget(this.rt);
+    renderer.setRenderTarget(rt);
     renderer.render(this.scene, this.camera);
-    const px = new Uint8Array(SIZE * SIZE * 4);
-    renderer.readRenderTargetPixels(this.rt, 0, 0, SIZE, SIZE, px);
+    const px = new Uint8Array(SIZE_ * SIZE_ * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, SIZE_, SIZE_, px);
     renderer.setRenderTarget(prevTarget);
     renderer.toneMappingExposure = prevExposure;
     renderer.shadowMap.enabled = prevShadow;
     this.scene.remove(obj);
-    obj.traverse((o) => { if (o.isMesh && !obj.userData.keepGeometry && obj.userData.prefab && !o.geometry?.userData.shared) o.geometry?.dispose(); });
+    this.ground.visible = true;
+    obj.traverse((o) => { if (o.isMesh && !obj.userData.keepGeometry && (obj.userData.prefab || obj.userData.sphere) && !o.geometry?.userData.shared) o.geometry?.dispose(); });
 
     const c = document.createElement('canvas');
-    c.width = c.height = SIZE;
+    c.width = c.height = SIZE_;
     const ctx = c.getContext('2d');
-    const img = ctx.createImageData(SIZE, SIZE);
+    const img = ctx.createImageData(SIZE_, SIZE_);
     // WebGL lê de baixo para cima: inverte as linhas
-    for (let y = 0; y < SIZE; y++) img.data.set(px.subarray((SIZE - 1 - y) * SIZE * 4, (SIZE - y) * SIZE * 4), y * SIZE * 4);
+    for (let y = 0; y < SIZE_; y++) img.data.set(px.subarray((SIZE_ - 1 - y) * SIZE_ * 4, (SIZE_ - y) * SIZE_ * 4), y * SIZE_ * 4);
     ctx.putImageData(img, 0, 0);
     return c.toDataURL('image/png');
   }
@@ -139,7 +167,12 @@ export function foliageThumb(p) {
     ctx.moveTo(x, 94);
     ctx.quadraticCurveTo(x + lean * 0.3, 94 - h * 0.6, x + lean, 94 - h);
     ctx.stroke();
-    if (rnd() < p.flowers * 2.2) {
+    if (p.heads && rnd() < p.heads) {
+      ctx.fillStyle = p.headColor || '#d9b35a';
+      ctx.beginPath();
+      ctx.ellipse(x + lean, 94 - h + 5, 2.2, 6, lean * 0.02, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (rnd() < p.flowers * 2.2) {
       ctx.fillStyle = rnd() < 0.5 ? p.flowerA : p.flowerB;
       ctx.beginPath();
       ctx.arc(x + lean, 94 - h, 2.6, 0, Math.PI * 2);

@@ -2,14 +2,13 @@
 // Fluxo inspirado no UnrealEd 2 do Lineage 2: escolhe a peça, clica no chão, ajusta com o gizmo.
 import * as THREE from 'three';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
-import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-import { FBXLoader } from 'three/examples/jsm/loaders/FBXLoader.js';
-import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { buildPrefab, PREFAB_MAP } from './prefabs.js';
+import { generateStructure } from '../build/structure.js';
+import { loadModel } from './meshImport.js';
 import { ClothSim, makeClothMeshes, disposeClothMeshes } from '../cloth/cloth.js';
 import { defaultClothPreset, npcDefaults } from '../core/state.js';
-import { uid, DEG, base64ToBytes } from '../core/util.js';
+import { uid, DEG } from '../core/util.js';
 
 export const NPC_TYPES = [
   { id: 'Merchant', label: 'Mercador', color: '#e0b84a' },
@@ -32,6 +31,7 @@ export const ZONE_TYPES = [
 export const ZONE_TYPE_MAP = new Map(ZONE_TYPES.map((t) => [t.id, t]));
 
 const ghostMaterial = new THREE.MeshBasicMaterial({ color: 0x7fd3ff, transparent: true, opacity: 0.35, depthWrite: false });
+const glassMaterial = new THREE.MeshStandardMaterial({ color: '#1c2630', roughness: 0.08, metalness: 0.35, envMapIntensity: 1.4 });
 
 function labelSprite(title, name, color = '#ffffff') {
   const c = document.createElement('canvas');
@@ -74,6 +74,7 @@ export class CityEditor {
     this.cloths = new Map();
     this.npcChars = new Map(); // uid do NPC -> personagem animado (aba Personagens)
     this.meshTemplates = new Map();
+    this.structTemplates = new Map(); // id da construção -> {group, rev, colliders, deck}
     this.selected = null;
 
     this.tool = 'selecionar';
@@ -125,12 +126,14 @@ export class CityEditor {
   // ------------------------------------------------------------ desfazer
   snapshot() {
     const p = this.project;
-    return JSON.stringify({ objects: p.objects, npcs: p.npcs, zones: p.zones });
+    return JSON.stringify({ objects: p.objects, npcs: p.npcs, zones: p.zones, structures: p.structures || [] });
   }
 
   restore(json) {
     const s = JSON.parse(json);
+    const structsChanged = JSON.stringify(this.project.structures || []) !== JSON.stringify(s.structures);
     Object.assign(this.project, s);
+    if (structsChanged) this.clearStructureTemplates();
     const sel = this.selected;
     this.rebuildAll();
     if (sel && this.nodes.has(sel.uid)) this.select(sel.kind, sel.uid);
@@ -196,12 +199,118 @@ export class CityEditor {
       }
       return SkeletonUtils.clone(tpl);
     }
+    if (o.kind === 'struct') {
+      const t = this.structureTemplate(o.ref);
+      return t ? t.clone(true) : new THREE.Group();
+    }
     return buildPrefab(o.ref, o.color, o.seed);
+  }
+
+  // ------------------------------------------------------------ construções do Construtor
+  /** Modelo (geometria + materiais) de uma construção; as cópias no mundo compartilham tudo. */
+  structureTemplate(id) {
+    const def = (this.project.structures || []).find((x) => x.id === id);
+    if (!def) return null;
+    const cached = this.structTemplates.get(id);
+    if (cached && cached.rev === (def.rev || 0)) return cached.group;
+    if (cached) this._disposeTemplate(cached);
+    const { group, r } = this.buildStructureGroup(def);
+    group.name = def.name;
+    group.userData.structure = id;
+    this.structTemplates.set(id, { group, rev: def.rev || 0, colliders: r.colliders, deck: r.deck, height: r.height });
+    return group;
+  }
+
+  /** Gera o grupo 3D (com LOD) de uma definição de construção. */
+  buildStructureGroup(def, { lod = true } = {}) {
+    const r = generateStructure(def);
+    const lib = this.app.materials;
+    const seedRnd = (k) => { const x = Math.sin((def.seed || 1) * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
+    const weather = { ...def.weather, seed: (def.seed % 997) / 97 };
+    const matFor = (slot, i) => {
+      if (slot === 'vidro') return glassMaterial;
+      const sd = { uv: 1, ...(def.slots?.[slot] || { mat: 'reboco' }) };
+      const w = { ...weather, uvOff: def.variation?.uvOffset !== false ? [seedRnd(i) * 7, seedRnd(i + 9) * 7] : [0, 0] };
+      const rot = def.variation?.randomRot ? Math.floor(seedRnd(i + 3) * 4) * (Math.PI / 2) : 0;
+      if (slot !== 'parede' && slot !== 'base') w.damage = 0;
+      return lib.material({ ...sd, rot }, w);
+    };
+    const toGroup = (geos) => {
+      const g = new THREE.Group();
+      let i = 0;
+      for (const [slot, geo] of geos) {
+        const m = new THREE.Mesh(geo, matFor(slot, i++));
+        m.castShadow = slot !== 'vidro';
+        m.receiveShadow = true;
+        m.name = slot;
+        g.add(m);
+      }
+      return g;
+    };
+    let group;
+    const high = toGroup(r.geos);
+    if (r.low && lod) {
+      group = new THREE.LOD();
+      group.addLevel(high, 0);
+      group.addLevel(toGroup(r.low), Math.max(90, r.height * 8));
+      group.autoUpdate = true;
+    } else {
+      group = high;
+      if (r.low) for (const [, g] of r.low) g.dispose();
+    }
+    return { group, r };
+  }
+
+  _disposeTemplate(t) {
+    t.group.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+  }
+
+  clearStructureTemplates() {
+    for (const [, t] of this.structTemplates) this._disposeTemplate(t);
+    this.structTemplates.clear();
+  }
+
+  /** Refaz as cópias de uma construção (depois de editar parâmetros ou materiais). */
+  refreshStructure(id) {
+    const def = (this.project.structures || []).find((x) => x.id === id);
+    const t = this.structTemplates.get(id);
+    if (t && (!def || t.rev !== (def.rev || 0))) { this._disposeTemplate(t); this.structTemplates.delete(id); }
+    for (const o of this.project.objects) if (o.kind === 'struct' && o.ref === id) this.refreshNode('object', o.uid);
+  }
+
+  refreshStructures() {
+    this.clearStructureTemplates();
+    for (const o of this.project.objects) if (o.kind === 'struct') this.refreshNode('object', o.uid);
+  }
+
+  /** Paredes e pontes das construções no espaço do mundo (para o modo Play). */
+  collectPhysics() {
+    const walls = [], decks = [];
+    const v = new THREE.Vector3();
+    for (const o of this.project.objects) {
+      if (o.kind !== 'struct') continue;
+      const node = this.nodes.get(o.uid);
+      const t = this.structTemplates.get(o.ref);
+      if (!node || !t) continue;
+      node.updateMatrixWorld(true);
+      const m = node.matrixWorld;
+      const w2 = (p, y = 0) => { v.set(p[0], y, p[1]).applyMatrix4(m); return [v.x, v.y, v.z]; };
+      for (const c of t.colliders) {
+        const a = w2(c.a), b = w2(c.b, c.h);
+        walls.push({ ax: a[0], az: a[2], bx: b[0], bz: b[2], t: c.t * o.scale[0], bottom: a[1] - 1, top: b[1] });
+      }
+      if (t.deck) {
+        const d = t.deck;
+        const a = w2(d.a, d.y0), b = w2(d.b, d.y1);
+        decks.push({ ax: a[0], az: a[2], ay: a[1], bx: b[0], bz: b[2], by: b[1], w: d.w * o.scale[0], rise: d.rise * o.scale[1] });
+      }
+    }
+    return { walls, decks };
   }
 
   _addObjectNode(o) {
     const node = this._buildObject(o);
-    node.userData.sharedGeometry = o.kind === 'mesh';
+    node.userData.sharedGeometry = o.kind === 'mesh' || o.kind === 'struct';
     node.userData.uid = o.uid;
     node.userData.kind = 'object';
     this._applyTransform(node, o);
@@ -388,20 +497,9 @@ export class CityEditor {
 
   // ------------------------------------------------------------ malhas importadas
   async loadCustomMesh(entry) {
-    const bytes = base64ToBytes(entry.data);
-    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-    let obj;
-    const fmt = entry.format.toLowerCase();
-    if (fmt === 'glb' || fmt === 'gltf') {
-      const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '', res, rej));
-      obj = gltf.scene;
-    } else if (fmt === 'fbx') {
-      obj = new FBXLoader().parse(buf, '');
-    } else if (fmt === 'obj') {
-      obj = new OBJLoader().parse(new TextDecoder().decode(bytes));
-    } else {
-      throw new Error(`Formato não suportado: ${fmt}`);
-    }
+    // modelo + texturas guardadas junto (GLTF com .bin, OBJ com .mtl, FBX com as imagens)
+    const { object: obj, report } = await loadModel(entry);
+    entry.linked = report;
     obj.traverse((o) => {
       if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
     });
@@ -425,12 +523,14 @@ export class CityEditor {
   // ------------------------------------------------------------ criação de dados
   newObject(ref, pos, extra = {}) {
     const isMesh = ref.startsWith('mesh:');
-    const def = isMesh ? null : PREFAB_MAP.get(ref);
+    const isStruct = ref.startsWith('struct:');
+    const def = isMesh || isStruct ? null : PREFAB_MAP.get(ref);
+    const sdef = isStruct ? (this.project.structures || []).find((x) => x.id === ref.slice(7)) : null;
     return {
       uid: uid('obj'),
-      kind: isMesh ? 'mesh' : 'prefab',
-      ref: isMesh ? ref.slice(5) : ref,
-      name: isMesh ? this.project.customMeshes.find((m) => m.id === ref.slice(5))?.name || 'Malha' : def?.name || ref,
+      kind: isMesh ? 'mesh' : isStruct ? 'struct' : 'prefab',
+      ref: isMesh ? ref.slice(5) : isStruct ? ref.slice(7) : ref,
+      name: isMesh ? this.project.customMeshes.find((m) => m.id === ref.slice(5))?.name || 'Malha' : isStruct ? sdef?.name || 'Construção' : def?.name || ref,
       pos: [pos.x, pos.y, pos.z],
       rot: [0, extra.yaw ?? 0, 0],
       scale: [extra.scale ?? 1, extra.scale ?? 1, extra.scale ?? 1],
@@ -645,6 +745,9 @@ export class CityEditor {
       g = w;
     } else if (ref.startsWith('mesh:')) {
       const t = this.meshTemplates.get(ref.slice(5));
+      g = t ? t.clone(true) : new THREE.Group();
+    } else if (ref.startsWith('struct:')) {
+      const t = this.structureTemplate(ref.slice(7));
       g = t ? t.clone(true) : new THREE.Group();
     } else {
       g = buildPrefab(ref, null, 1);

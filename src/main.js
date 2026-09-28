@@ -36,6 +36,9 @@ import { ContentBrowser } from './ui/contentBrowser.js';
 import { Hierarchy } from './ui/hierarchy.js';
 import { PlayMode } from './play/play.js';
 import { Assistant } from './ai/assistant.js';
+import { MaterialLibrary } from './materials/library.js';
+import { materiaisMode } from './modes/materiais.js';
+import { construtorMode } from './modes/construtor.js';
 
 export const APP_NAME = 'EDITORJOGO';
 const AUTOSAVE_KEY = 'editorjogo:autosave';
@@ -73,7 +76,7 @@ class App {
     this.playing = false;
     this.show = { grama: true, agua: true, nuvens: true, objetos: true, npcs: true, zonas: true, rotulos: true, sombras: true, minimapa: true };
     this.viewMode = 'iluminado';
-    this.modes = [mundoMode, terrenoMode, objetosMode, npcMode, personagensMode, clothMode, multisellMode, htmlMode, exportMode];
+    this.modes = [mundoMode, terrenoMode, objetosMode, construtorMode, materiaisMode, npcMode, personagensMode, clothMode, multisellMode, htmlMode, exportMode];
     this.quality = loadQuality();
     this.editorLog = new EditorLog();
     this.log = (msg, type = 'info') => this.editorLog.add(msg, type);
@@ -234,6 +237,10 @@ class App {
         showItem('grama', 'Grama'), showItem('agua', 'Água'), showItem('nuvens', 'Nuvens'), showItem('sombras', 'Sombras'), showItem('rotulos', 'Nomes dos NPCs'),
       ]],
       ['Ferramentas', () => [
+        { label: 'Assistente Claude', icon: 'sparkles', action: () => this.assistant.toggle(true) },
+        { label: 'Construtor de casas', icon: 'building', action: () => this.setMode('construtor') },
+        { label: 'Biblioteca de materiais', icon: 'image', action: () => this.setMode('materiais') },
+        { sep: true },
         { label: 'Validar projeto', icon: 'check', action: () => this.setMode('exportar') },
         { label: 'Importar itens do servidor…', icon: 'item', action: () => this.importItems() },
         { label: 'Limpar log', icon: 'trash', action: () => this.editorLog.clear() },
@@ -289,6 +296,7 @@ class App {
     this.grass = new Grass(this);
     this.water = new Water();
     this.scene.add(this.water.mesh);
+    this.materials = new MaterialLibrary(this);
     this.city = new CityEditor(this);
     this.scene.add(this.city.root);
     this.capeLab = new CapeLab(this);
@@ -335,6 +343,10 @@ class App {
         else personagensMode.select(this, id);
       },
       cloth: (p) => { this.setMode('roupa'); clothMode.applyPreset(p); },
+      material: (id) => {
+        if (this.mode?.assignMaterial) this.mode.assignMaterial(this, id);
+        else { this.setMode('materiais'); materiaisMode.select(this, id); }
+      },
       item: (it) => {
         if (this.mode?.id === 'loja') multisellMode.addItem(it);
         else this.log(`Item ${it.id}: ${it.name}${it.type ? ` (${it.type})` : ''} — abra a aba Loja e clique para adicionar à venda.`);
@@ -353,6 +365,7 @@ class App {
     this.workspace.append(this.assistant.panel);
     const charsChanged = debounce(() => { this.city.refreshCharacters(); this.contentBrowser.renderGrid(); }, 60);
     this.events.on('characters-changed', charsChanged);
+    this.events.on('materials-changed', debounce(() => { this.materials.cache.clear(); this.city.refreshStructures?.(); this.contentBrowser.renderGrid(); }, 80));
     this.events.on('layers-changed', () => {
       this.minimap.rebuildSoon();
       this.contentBrowser.renderGrid();
@@ -556,7 +569,7 @@ class App {
     this.status(next.hint || '');
     // o Navegador de Conteúdo acompanha a aba
     const objFolders = ['Construções', 'Muralhas', 'Decoração', 'Natureza', 'malhas', 'objetos'];
-    const folder = { terreno: 'texturas', npc: 'npcs', personagens: 'modelos', roupa: 'roupas', loja: 'itens', html: 'paginas' }[id]
+    const folder = { terreno: 'texturas', npc: 'npcs', personagens: 'modelos', materiais: 'materiais', construtor: 'mat-tijolo', roupa: 'roupas', loja: 'itens', html: 'paginas' }[id]
       || (id === 'objetos' && !objFolders.includes(this.contentBrowser.folder) ? 'Construções' : null);
     if (folder && folder !== this.contentBrowser.folder) this.contentBrowser.open(folder);
     this.contentBrowser.renderGrid();
@@ -779,6 +792,7 @@ class App {
     this.applyTerrainSettings();
     this.sky.apply(pr.sky);
     this.city.meshTemplates.clear();
+    this.city.clearStructureTemplates();
     for (const m of pr.customMeshes) {
       try { await this.city.loadCustomMesh(m); } catch (err) { toast(`Não consegui carregar a malha ${m.name}: ${err.message}`, 'error'); }
     }
