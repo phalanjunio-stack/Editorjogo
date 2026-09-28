@@ -81,6 +81,8 @@ dentro de projetos do Unreal Engine; levar para outro sistema quebra a licença.
 
 Aba **Construir**: escolha o tipo e clique no chão.
 
+![Casas do Construtor: preset A (tijolo e telha velha com musgo), B (rebocada) e torre](docs/img/construtor.png)
+
 | Tipo | Como marcar | O que sai |
 |---|---|---|
 | **Casa** | Os cantos (o **1º lado é a frente**, com a porta). 2 cliques = retângulo com a *Largura* do painel | Base de pedra, paredes com porta e janelas (moldura, vidro, venezianas), **enxaimel** (pilares, vigas e mãos-francesas), andares, telhado de duas ou quatro águas (ou plano/ameias; em formas que não são retângulo, telhado em tenda), oitões, chaminé |
@@ -108,6 +110,8 @@ Aba **Construir**: escolha o tipo e clique no chão.
   uma cópia numa construção própria. **Converter em malha** gera um .glb com as texturas (para outro programa ou como malha comum).
 
 ## Materiais (3 a 5 mapas)
+
+![Biblioteca de materiais](docs/img/materiais.png)
 
 A aba **Materiais** mostra a biblioteca como esferas, por categoria. Os 28 materiais de construção embutidos são fotos
 do [Poly Haven](https://polyhaven.com) (CC0) com cor, normal e um mapa que junta **oclusão, rugosidade e altura** —
